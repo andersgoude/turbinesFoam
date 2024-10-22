@@ -226,6 +226,7 @@ void Foam::fv::actuatorLineSource::createElements()
         vector position;
         scalar chordLength;
         vector chordDirection;
+        vector chordRefDirection;
         scalar spanLength = spanLengths[geometrySegmentIndex];
         spanLength /= nElementsPerSegment;
         vector spanDirection;
@@ -288,6 +289,9 @@ void Foam::fv::actuatorLineSource::createElements()
                        + deltaChordDirTotal/nElementsPerSegment*pointIndex
                        + deltaChordDirTotal/nElementsPerSegment/2;
 
+        // Chord reference direction (before pitching)
+        chordRefDirection = chordDirection;
+        
         // Calculate nondimensional root distance
         scalar rootDistance = mag(position - rootLocation)/totalLength_;
 
@@ -299,6 +303,7 @@ void Foam::fv::actuatorLineSource::createElements()
         dict.add("profileName", profileName);
         dict.add("chordLength", chordLength);
         dict.add("chordDirection", chordDirection);
+        dict.add("chordRefDirection", chordRefDirection);
         dict.add("spanLength", spanLength);
         dict.add("spanDirection", spanDirection);
         dict.add("freeStreamVelocity", freeStreamVelocity_);
@@ -351,7 +356,7 @@ void Foam::fv::actuatorLineSource::createElements()
             name, dict, mesh_
         );
         elements_.set(i, element);
-        pitch = pitch/180.0*Foam::constant::mathematical::pi;
+        pitch = Foam::degToRad(pitch);
         elements_[i].pitch(pitch);
         elements_[i].setVelocity(initialVelocity);
     }
@@ -513,7 +518,7 @@ Foam::fv::actuatorLineSource::actuatorLineSource
         dimensionedVector
         (
             "force",
-            dimForce/dimVolume/dimDensity,
+            dimForce/dimVolume,
             vector::zero
         )
     ),
@@ -680,7 +685,7 @@ void Foam::fv::actuatorLineSource::addSup
     }
 
     // Zero out force field
-    forceField_ *= 0;
+    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
 
     // Zero the total force vector
     force_ = vector::zero;
@@ -693,6 +698,12 @@ void Foam::fv::actuatorLineSource::addSup
 
     Info<< "Force (per unit density) on " << name_ << ": "
         << endl << force_ << endl << endl;
+
+    // Check dimensions on force field and correct if necessary
+    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+    {
+        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+    }
 
     // Add source to eqn
     eqn += forceField_;
@@ -743,14 +754,8 @@ void Foam::fv::actuatorLineSource::addSup
         harmonicPitching();
     }
 
-    // Check dimensions on force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
-
     // Zero out force field
-    forceField_ *= 0;
+    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
 
     // Zero the total force vector
     force_ = vector::zero;
@@ -762,6 +767,12 @@ void Foam::fv::actuatorLineSource::addSup
     }
 
     Info<< "Force on " << name_ << ": " << endl << force_ << endl << endl;
+
+    // Check dimensions of force field and correct if necessary
+    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+    {
+        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+    }
 
     // Add source to eqn
     eqn += forceField_;
