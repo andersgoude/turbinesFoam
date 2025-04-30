@@ -454,6 +454,10 @@ void Foam::fv::LeishmanBeddoes::calcSeparated()
 void Foam::fv::LeishmanBeddoes::update()
 {
     timePrev_ = time_.value();
+    if (useCustomTime_)
+    {
+        timePrev_ = customTime_;
+    }
     alphaPrev_ = alpha_;
     XPrev_ = X_;
     YPrev_ = Y_;
@@ -558,6 +562,11 @@ void Foam::fv::LeishmanBeddoes::correct
     scalar pi = Foam::constant::mathematical::pi;
     scalar time = time_.value();
     deltaT_ = time_.deltaT().value();
+    if (useCustomTime_)
+    {
+        time = customTime_;
+        deltaT_ = customDeltaT_;
+    }
 
     // Update previous values if time has changed
     if (time != timePrev_)

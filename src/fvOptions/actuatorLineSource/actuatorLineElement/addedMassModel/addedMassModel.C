@@ -108,6 +108,11 @@ void Foam::addedMassModel::correct
     scalar pi = Foam::constant::mathematical::pi;
     scalar time = time_.value();
     scalar deltaT = time_.deltaT().value();
+    if (useCustomTime_)
+    {
+        time = customTime_;
+        deltaT = customDeltaT_;
+    }
     chordwiseRelVel_ = chordwiseRelVel;
     normalRelVel_ = normalRelVel;
     scalar relVelMagSqr = magSqr(normalRelVel_) + magSqr(chordwiseRelVel_);
@@ -166,4 +171,10 @@ void Foam::addedMassModel::correct
 }
 
 
+void Foam::addedMassModel::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+{
+    customTime_ = time;
+    customDeltaT_ = deltaT;
+    useCustomTime_ = useCustomTime;
+}
 // ************************************************************************* //

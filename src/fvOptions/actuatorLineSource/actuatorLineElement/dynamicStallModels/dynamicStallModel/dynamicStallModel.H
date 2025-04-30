@@ -77,6 +77,15 @@ protected:
 
         //- Starting time for the model
         scalar startTime_;
+        
+        //- Used for actuator disc to override the simulation time
+        scalar customTime_;
+        
+        //- Used for actuator disc to override the simulation time step
+        scalar customDeltaT_;
+        
+        //- To activate the use of customtime_
+        bool useCustomTime_;
 
 
     // Protected member functions
@@ -145,6 +154,7 @@ public:
         // Check
 
         // Edit
+            void setCustomTime(scalar time, scalar deltaT, bool useCustomTime = true);
 
         // Evaluation
 

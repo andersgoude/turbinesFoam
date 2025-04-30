@@ -524,7 +524,8 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     ),
     writePerf_(coeffs_.lookupOrDefault("writePerf", false)),
     lastMotionTime_(mesh.time().value()),
-    endEffectsActive_(false)
+    endEffectsActive_(false),
+    applyForce_(true)
 {
     read(dict_);
     createElements();
@@ -636,6 +637,21 @@ void Foam::fv::actuatorLineSource::setOmega(scalar omega)
 }
 
 
+void Foam::fv::actuatorLineSource::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+{
+    forAll(elements_, i)
+    {
+        elements_[i].setCustomTime(time, deltaT, useCustomTime);
+    }
+}
+
+
+void Foam::fv::actuatorLineSource::setApplyForce(bool active)
+{
+    applyForce_ = active;
+}
+
+
 const Foam::vector& Foam::fv::actuatorLineSource::force()
 {
     return force_;
@@ -706,7 +722,10 @@ void Foam::fv::actuatorLineSource::addSup
     }
 
     // Add source to eqn
-    eqn += forceField_;
+    if (applyForce_)
+    { 
+        eqn += forceField_;
+    }
 
     // Write performance to file
     if (writePerf_ and Pstream::master())
@@ -775,7 +794,10 @@ void Foam::fv::actuatorLineSource::addSup
     }
 
     // Add source to eqn
-    eqn += forceField_;
+    if (applyForce_)
+    { 
+        eqn += forceField_;
+    }
 
     // Write performance to file
     if (writePerf_ and Pstream::master())

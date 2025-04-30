@@ -394,6 +394,10 @@ public:
 
             //- Set number of velocity samples
             void setNVelocitySamples(label nSamples);
+            
+            //- Set custom time value for actuator disc model, where the internal
+            //  time is not the same as the simulation time
+            void setCustomTime(scalar time, scalar deltaT, bool useCustomTime = true);
 
 
         // Evaluation

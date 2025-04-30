@@ -36,7 +36,7 @@ SourceFiles
 #define turbineALSource_H
 
 #include "cellSetOption.H"
-#include "NamedEnum.H"
+//#include "NamedEnum.H"
 #include "actuatorLineSource.H"
 #include "volFieldsFwd.H"
 #include "OFstream.H"

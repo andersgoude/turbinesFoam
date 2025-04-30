@@ -168,6 +168,7 @@ Foam::fv::dynamicStallModel::dynamicStallModel
         Info<< modelName << " dynamic stall model created" << endl
             << "    Coeffs:" << endl << coeffs_ << endl;
     }
+    useCustomTime_ = false;
 }
 
 
@@ -178,6 +179,15 @@ Foam::fv::dynamicStallModel::~dynamicStallModel()
 
 
 // * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * * //
+
+
+void Foam::fv::dynamicStallModel::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+{
+    customTime_ = time;
+    customDeltaT_ = deltaT;
+    useCustomTime_ = useCustomTime;
+}
+
 
 void Foam::fv::dynamicStallModel::correct(scalar alpha, scalar& cl, scalar& cd)
 {}

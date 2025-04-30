@@ -80,6 +80,15 @@ class addedMassModel
 
         //- Previous value of normal relative velocity
         scalar normalRelVelPrev_;
+        
+        //- Used for actuator disc to override the simulation time
+        scalar customTime_;
+        
+        //- Used for actuator disc to override the simulation time step
+        scalar customDeltaT_;
+        
+        //- To activate the use of customtime_
+        bool useCustomTime_;
 
 
     // Private Member Functions
@@ -140,7 +149,7 @@ public:
 
 
         // Write
-
+            void setCustomTime(scalar time, scalar deltaT, bool useCustomTime = true);
 
 };
 

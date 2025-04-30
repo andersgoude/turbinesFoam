@@ -1174,4 +1174,17 @@ void Foam::fv::actuatorLineElement::setNVelocitySamples(label nSamples)
 }
 
 
+void Foam::fv::actuatorLineElement::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+{
+    if (dynamicStallActive_)
+    {
+        dynamicStall_->setCustomTime(time, deltaT, useCustomTime);
+    }
+    if (addedMassActive_)
+    {
+        addedMass_.setCustomTime(time, deltaT, useCustomTime);
+    }
+}
+
+
 // ************************************************************************* //
