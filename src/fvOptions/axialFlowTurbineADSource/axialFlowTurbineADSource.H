@@ -22,20 +22,20 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::fv::crossFlowTurbineADSource
+    Foam::fv::axialFlowTurbineADSource
 
 Description
     Cell based momentum source that represents a cross-flow turbine
 
 SourceFiles
-    crossFlowTurbineADSource.C
+    axialFlowTurbineADSource.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef crossFlowTurbineADSource_H
-#define crossFlowTurbineADSource_H
+#ifndef axialFlowTurbineADSource_H
+#define axialFlowTurbineADSource_H
 
-#include "crossFlowTurbineALSource.H"
+#include "axialFlowTurbineALSource.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -48,9 +48,9 @@ namespace fv
                       Class crossFlowTurbineALSource Declaration
 \*---------------------------------------------------------------------------*/
 
-class crossFlowTurbineADSource
+class axialFlowTurbineADSource
 :
-    public crossFlowTurbineALSource
+    public axialFlowTurbineALSource
 {
 
 protected:
@@ -85,13 +85,13 @@ protected:
 public:
 
     //- Runtime type information
-    TypeName("crossFlowTurbineADSource");
+    TypeName("axialFlowTurbineADSource");
 
 
     // Constructors
 
         //- Construct from components
-        crossFlowTurbineADSource
+        axialFlowTurbineADSource
         (
             const word& name,
             const word& modelType,
@@ -101,7 +101,7 @@ public:
 
 
     //- Destructor
-    virtual ~crossFlowTurbineADSource();
+    virtual ~axialFlowTurbineADSource();
 
 
     // Member Functions

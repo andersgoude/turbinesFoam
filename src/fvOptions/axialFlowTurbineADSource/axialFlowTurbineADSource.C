@@ -23,7 +23,7 @@ License
 
 \*---------------------------------------------------------------------------*/
 
-#include "crossFlowTurbineADSource.H"
+#include "axialFlowTurbineADSource.H"
 #include "addToRunTimeSelectionTable.H"
 #include "fvMatrices.H"
 #include "geometricOneField.H"
@@ -38,11 +38,11 @@ namespace Foam
 {
 namespace fv
 {
-    defineTypeNameAndDebug(crossFlowTurbineADSource, 0);
+    defineTypeNameAndDebug(axialFlowTurbineADSource, 0);
     addToRunTimeSelectionTable
     (
         option,
-        crossFlowTurbineADSource,
+        axialFlowTurbineADSource,
         dictionary
     );
 }
@@ -54,7 +54,7 @@ namespace fv
 
 // * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * * //
 
-Foam::fv::crossFlowTurbineADSource::crossFlowTurbineADSource
+Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
 (
     const word& name,
     const word& modelType,
@@ -62,7 +62,7 @@ Foam::fv::crossFlowTurbineADSource::crossFlowTurbineADSource
     const fvMesh& mesh
 )
 :
-    crossFlowTurbineALSource(name, modelType, dict, mesh)
+    axialFlowTurbineALSource(name, modelType, dict, mesh)
 {
     read(dict);
     customTime_ = mesh.time().value();
@@ -71,31 +71,33 @@ Foam::fv::crossFlowTurbineADSource::crossFlowTurbineADSource
     {
         blades_[i].setApplyForce(false);
     }
-
-    if (hasStruts_)
+    
+    if (hasHub_)
     {
-        forAll(struts_, i)
-        {
-            struts_[i].setApplyForce(false);
-        }
+        hub_->setApplyForce(false);
+    }
+    
+    if (hasTower_)
+    {
+        tower_->setApplyForce(false);
     }
 
-    if (hasShaft_)
+    if (hasNacelle_)
     {
-        shaft_->setApplyForce(false);
+        nacelle_->setApplyForce(false);
     }
 }
 
 
 // * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
 
-Foam::fv::crossFlowTurbineADSource::~crossFlowTurbineADSource()
+Foam::fv::axialFlowTurbineADSource::~axialFlowTurbineADSource()
 {}
 
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-void Foam::fv::crossFlowTurbineADSource::rotateAD(bool updateOnly)
+void Foam::fv::axialFlowTurbineADSource::rotateAD(bool updateOnly)
 {
     
     scalar radians = 2*mathematical::pi/divisions_;
@@ -116,22 +118,24 @@ void Foam::fv::crossFlowTurbineADSource::rotateAD(bool updateOnly)
     {
         blades_[i].setCustomTime(customTime_, deltaT);
     }
-
-    if (hasStruts_)
+    
+    if (hasHub_)
     {
-        forAll(struts_, i)
-        {
-            struts_[i].setCustomTime(customTime_, deltaT);
-        }
+        hub_->setCustomTime(customTime_, deltaT);
+    }
+    
+    if (hasTower_)
+    {
+        tower_->setCustomTime(customTime_, deltaT);
     }
 
-    if (hasShaft_)
+    if (hasNacelle_)
     {
-        shaft_->setCustomTime(customTime_, deltaT);
+        nacelle_->setCustomTime(customTime_, deltaT);
     }
 }
 
-void Foam::fv::crossFlowTurbineADSource::rotate(scalar radians)
+void Foam::fv::axialFlowTurbineADSource::rotate(scalar radians)
 {
     if (debug)
     {
@@ -145,24 +149,15 @@ void Foam::fv::crossFlowTurbineADSource::rotate(scalar radians)
         blades_[i].setSpeed(origin_, axis_, omega_);
     }
 
-    if (hasStruts_)
+    if (hasHub_)
     {
-        forAll(struts_, i)
-        {
-            struts_[i].rotate(origin_, axis_, radians);
-            struts_[i].setSpeed(origin_, axis_, omega_);
-        }
-    }
-
-    if (hasShaft_)
-    {
-        shaft_->rotate(origin_, axis_, radians);
-        shaft_->setSpeed(origin_, axis_, omega_);
+        hub_->rotate(origin_, axis_, radians);
+        hub_->setSpeed(origin_, axis_, omega_);
     }
 }
 
 
-void Foam::fv::crossFlowTurbineADSource::addSup
+void Foam::fv::axialFlowTurbineADSource::addSup
 (
     fvMatrix<vector>& eqn,
     const label fieldI
@@ -187,6 +182,12 @@ void Foam::fv::crossFlowTurbineADSource::addSup
 
             // Create local moment vector
             vector moment(vector::zero);
+            
+            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
+            {
+                // Calculate end effects based on current velocity field
+                calcEndEffects();
+            }
 
             // Add source for blade actuator lines
             forAll(blades_, i)
@@ -199,25 +200,35 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 moment += bladeMoments_[i];
             }
 
-            if (hasStruts_)
+            if (hasHub_)
             {
-                // Add source for strut actuator lines
-                forAll(struts_, i)
+                // Add source for hub actuator line
+                hub_->addSup(eqn, fieldI);
+                forceField_ += (1.0/divisions_)*hub_->forceField();
+                force_ += hub_->force();
+                moment += hub_->moment(origin_);
+            }
+
+            if (hasTower_)
+            {
+                // Add source for tower actuator line
+                tower_->addSup(eqn, fieldI);
+                forceField_ += (1.0/divisions_)*tower_->forceField();
+                if (includeTowerDrag_)
                 {
-                    struts_[i].addSup(eqn, fieldI);
-                    forceField_ += (1.0/divisions_)*struts_[i].forceField();
-                    force_ += struts_[i].force();
-                    moment += struts_[i].moment(origin_);
+                    force_ += tower_->force();
                 }
             }
 
-            if (hasShaft_)
+            if (hasNacelle_)
             {
-                // Add source for shaft actuator line
-                shaft_->addSup(eqn, fieldI);
-                forceField_ += (1.0/divisions_)*shaft_->forceField();
-                force_ += shaft_->force();
-                moment += shaft_->moment(origin_);
+                // Add source for tower actuator line
+                nacelle_->addSup(eqn, fieldI);
+                forceField_ += (1.0/divisions_)*nacelle_->forceField();
+                if (includeNacelleDrag_)
+                {
+                    force_ += nacelle_->force();
+                }
             }
 
             // only needed to to do calculations for the actual loop,
@@ -251,7 +262,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
 }
 
 
-void Foam::fv::crossFlowTurbineADSource::addSup
+void Foam::fv::axialFlowTurbineADSource::addSup
 (
     const volScalarField& rho,
     fvMatrix<vector>& eqn,
@@ -276,6 +287,12 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             {
                 forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
             }
+            
+            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
+            {
+                // Calculate end effects based on current velocity field
+                calcEndEffects();
+            }
 
             // Add source for blade actuator lines
             forAll(blades_, i)
@@ -287,25 +304,35 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 moment += bladeMoments_[i];
             }
 
-            if (hasStruts_)
+            if (hasHub_)
             {
-                // Add source for strut actuator lines
-                forAll(struts_, i)
+                // Add source for hub actuator line
+                hub_->addSup(rho, eqn, fieldI);
+                forceField_ += (1.0/divisions_)*hub_->forceField();
+                force_ += hub_->force();
+                moment += hub_->moment(origin_);
+            }
+
+            if (hasTower_)
+            {
+                // Add source for tower actuator line
+                tower_->addSup(rho, eqn, fieldI);
+                forceField_ += (1.0/divisions_)*tower_->forceField();
+                if (includeTowerDrag_)
                 {
-                    struts_[i].addSup(rho, eqn, fieldI);
-                    forceField_ += (1.0/divisions_)*struts_[i].forceField();
-                    force_ += struts_[i].force();
-                    moment += struts_[i].moment(origin_);
+                    force_ += tower_->force();
                 }
             }
 
-            if (hasShaft_)
+            if (hasNacelle_)
             {
-                // Add source for shaft actuator line
-                shaft_->addSup(rho, eqn, fieldI);
-                forceField_ += (1.0/divisions_)*shaft_->forceField();
-                force_ += shaft_->force();
-                moment += shaft_->moment(origin_);
+                // Add source for tower actuator line
+                nacelle_->addSup(rho, eqn, fieldI);
+                forceField_ += (1.0/divisions_)*nacelle_->forceField();
+                if (includeNacelleDrag_)
+                {
+                    force_ += nacelle_->force();
+                }
             }
             
             if (currentLoop == dynStallLoop_ - 1)
@@ -338,7 +365,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
 }
 
 
-void Foam::fv::crossFlowTurbineADSource::addSup
+void Foam::fv::axialFlowTurbineADSource::addSup
 (
     fvMatrix<scalar>& eqn,
     const label fieldI
@@ -352,25 +379,34 @@ void Foam::fv::crossFlowTurbineADSource::addSup
         kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
+            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
+            {
+                // Calculate end effects based on current velocity field
+                calcEndEffects();
+            }
+            
             // Add scalar source term from blades
             forAll(blades_, i)
             {
                 blades_[i].addSup(kField, fieldI);
             }
 
-            if (hasStruts_)
+            if (hasHub_)
             {
-                // Add source for strut actuator lines
-                forAll(struts_, i)
-                {
-                    struts_[i].addSup(kField, fieldI);
-                }
+                // Add source for hub actuator line
+                hub_->addSup(kField, fieldI);
             }
 
-            if (hasShaft_)
+            if (hasTower_)
             {
-                // Add source for shaft actuator line
-                shaft_->addSup(kField, fieldI);
+                // Add source for tower actuator line
+                tower_->addSup(kField, fieldI);
+            }
+
+            if (hasNacelle_)
+            {
+                // Add source for nacelle actuator line
+                nacelle_->addSup(kField, fieldI);
             }
             rotateAD();
         }
@@ -379,7 +415,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
 }
 
 
-bool Foam::fv::crossFlowTurbineADSource::read(const dictionary& dict)
+bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
 {
     if (cellSetOption::read(dict))
     {
