@@ -344,14 +344,18 @@ void Foam::fv::actuatorLineElement::applyForceField
 
     // Apply force to the cells within the element's sphere of influence
     scalar sphereRadius = chordLength_ + projectionRadius;
+    scalar sphereRadiusSqr = sphereRadius*sphereRadius;
+    scalar invepsilonSqr = 1.0/(epsilon*epsilon);
+    scalar internalFactor = 1.0/(Foam::pow(epsilon, 3)
+                          * Foam::pow(Foam::constant::mathematical::pi, 1.5));
     forAll(mesh_.cells(), cellI)
     {
-        scalar dis = mag(mesh_.C()[cellI] - position_);
-        if (dis <= sphereRadius)
+        scalar dis = magSqr(mesh_.C()[cellI] - position_);
+        if (dis <= sphereRadiusSqr)
         {
-            scalar factor = Foam::exp(-Foam::sqr(dis/epsilon))
-                          / (Foam::pow(epsilon, 3)
-                          * Foam::pow(Foam::constant::mathematical::pi, 1.5));
+            scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
+                          /// (Foam::pow(epsilon, 3)
+                          //* Foam::pow(Foam::constant::mathematical::pi, 1.5));
             // forceField is opposite forceVector
             forceField[cellI] += -forceVector_*factor;
         }

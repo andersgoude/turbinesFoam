@@ -31,8 +31,10 @@ turbine
         rotorRadius         0.5;
         freeStreamVelocity  (1 0 0);
         tipSpeedRatio       1.9;
-        tsrAmplitude        0.19;       // Amplitude for TSR oscillation
-        tsrPhase            1.9;        // Angle of first peak (rad)
+        //tsrAmplitude        0.19;       // Amplitude for TSR oscillation
+        //tsrPhase            1.9;        // Angle of first peak (rad)
+        bladeMultiplier     3;          // 3-bladed turbine
+        divisions           90;        // number of steps/revolution
 
         dynamicStall
         {
@@ -82,18 +84,7 @@ turbine
                     ( 0.5 0.5 0.0 0.14 0.5 0.0)
                 );
             }
-            blade2
-            {
-                $blade1;
-                writePerf   false;
-                writeElementPerf false;
-                azimuthalOffset 120.0; // Degrees
-            }
-            blade3
-            {
-                $blade2;
-                azimuthalOffset 240.0;
-            }
+            
         }
 
         struts
@@ -108,17 +99,6 @@ turbine
                     (0.0 0.05 0.0 0.14 0.3 0.0)
                     (0.0 0.5 0.0 0.14 0.3 0.0)
                 );
-            }
-            strut2
-            {
-                $strut1;
-                writePerf   false;
-                azimuthalOffset 120.0;
-            }
-            strut3
-            {
-                $strut2;
-                azimuthalOffset 240.0;
             }
         }
 

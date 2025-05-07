@@ -65,10 +65,14 @@ protected:
         // 1 additional loop should be sufficient
         label dynStallLoop_;
         
+        //- Multiply the force with this value (basically allows to set up
+        // one bladed turbines that act like 3 bladed turbines)
+        scalar bladeMultiplier_;
+
         //- internal time used to perform a loop within the openfoam-step
         scalar customTime_;
         
-
+        
     // Protected Member Functions
 
         //- Create the co-ordinate system

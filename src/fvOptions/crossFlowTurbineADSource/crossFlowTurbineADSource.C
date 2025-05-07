@@ -192,7 +192,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].addSup(eqn, fieldI);
-                forceField_ += (1.0/divisions_)*blades_[i].forceField();
+                forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
                 force_ += blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
@@ -205,7 +205,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 forAll(struts_, i)
                 {
                     struts_[i].addSup(eqn, fieldI);
-                    forceField_ += (1.0/divisions_)*struts_[i].forceField();
+                    forceField_ += (bladeMultiplier_/divisions_)*struts_[i].forceField();
                     force_ += struts_[i].force();
                     moment += struts_[i].moment(origin_);
                 }
@@ -281,7 +281,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].addSup(rho, eqn, fieldI);
-                forceField_ += (1.0/divisions_)*blades_[i].forceField();
+                forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 force_ += blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
                 moment += bladeMoments_[i];
@@ -293,7 +293,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 forAll(struts_, i)
                 {
                     struts_[i].addSup(rho, eqn, fieldI);
-                    forceField_ += (1.0/divisions_)*struts_[i].forceField();
+                    forceField_ += (bladeMultiplier_/divisions_)*struts_[i].forceField();
                     force_ += struts_[i].force();
                     moment += struts_[i].moment(origin_);
                 }
@@ -350,6 +350,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
         // forceField_ should be the average during one revolution here
         fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());// = dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        fvMatrix<scalar> kFieldShaft(eqn.psi(), eqn.dimensions());// = dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        kFieldShaft *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Add scalar source term from blades
@@ -370,11 +372,11 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             if (hasShaft_)
             {
                 // Add source for shaft actuator line
-                shaft_->addSup(kField, fieldI);
+                shaft_->addSup(kFieldShaft, fieldI);
             }
             rotateAD();
         }
-        eqn += (1.0/divisions_)*kField;
+        eqn += (bladeMultiplier_/divisions_)*kField + (1.0/divisions_)*kFieldShaft;
     }
 }
 
@@ -390,6 +392,9 @@ bool Foam::fv::crossFlowTurbineADSource::read(const dictionary& dict)
         
         // Get number of divisions
         dynStallLoop_ = coeffs_.lookupOrDefault("dynStallLoop", 1);
+        
+        // Get blade multiplier
+        bladeMultiplier_ = coeffs_.lookupOrDefault("bladeMultiplier", 1.0);
         
         return true;
     }
