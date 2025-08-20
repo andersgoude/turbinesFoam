@@ -498,7 +498,7 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
                 {
                     scalar acosArg = Foam::exp
                     (
-                        -nBlades_/2.0*(1.0/rootDist - 1)/sin(phi)
+                        -effectiveNBlades_/2.0*(1.0/rootDist - 1)/sin(phi)
                     );
                     f = 2.0/pi*acos(min(1.0, acosArg));
                 }
@@ -507,7 +507,7 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
                     scalar tipDist = 1.0 - rootDist;
                     scalar acosArg = Foam::exp
                     (
-                        -nBlades_/2.0*(1.0/tipDist - 1)/sin(phi)
+                        -effectiveNBlades_/2.0*(1.0/tipDist - 1)/sin(phi)
                     );
                     f *= 2.0/pi*acos(min(1.0, acosArg));
                 }
@@ -518,12 +518,12 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
                 endEffectsCoeffs.lookup("c1") >> c1;
                 scalar c2;
                 endEffectsCoeffs.lookup("c2") >> c2;
-                scalar g = Foam::exp(-c1*(nBlades_*tipSpeedRatio_ - c2)) + 0.1;
+                scalar g = Foam::exp(-c1*(effectiveNBlades_*tipSpeedRatio_ - c2)) + 0.1;
                 if (endEffectsCoeffs.lookupOrDefault("tipEffects", true))
                 {
                     scalar acosArg = Foam::exp
                     (
-                        -g*nBlades_/2.0*(1.0/rootDist - 1)/sin(phi)
+                        -g*effectiveNBlades_/2.0*(1.0/rootDist - 1)/sin(phi)
                     );
                     f = 2.0/pi*acos(min(1.0, acosArg));
                 }
@@ -532,7 +532,7 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
                     scalar tipDist = 1.0 - rootDist;
                     scalar acosArg = Foam::exp
                     (
-                        -g*nBlades_/2.0*(1.0/tipDist - 1)/sin(phi)
+                        -g*effectiveNBlades_/2.0*(1.0/tipDist - 1)/sin(phi)
                     );
                     f *= 2.0/pi*acos(min(1.0, acosArg));
                 }
@@ -590,6 +590,9 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     // Yaw turbine to a static value if specified
     scalar yawAngle = coeffs_.lookupOrDefault("yawAngle", 0.0);
     yaw(degToRad(yawAngle));
+    
+    // For compatibility with actuatorDisc model
+    effectiveNBlades_ = nBlades_;
 
     if (debug)
     {

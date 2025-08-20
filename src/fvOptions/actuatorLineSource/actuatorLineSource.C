@@ -130,7 +130,7 @@ void Foam::fv::actuatorLineSource::createOutputFile()
 void Foam::fv::actuatorLineSource::createElements()
 {
     elements_.setSize(nElements_);
-
+    Info << "Start of createElements()" << endl;
     label nGeometryPoints = elementGeometry_.size();
     label nGeometrySegments = nGeometryPoints - 1;
     label nElementsPerSegment = nElements_/nGeometrySegments;
@@ -152,6 +152,7 @@ void Foam::fv::actuatorLineSource::createElements()
     totalLength_ = 0.0;
     chordLength_ = 0.0;
 
+    Info << "Start of loop in createElements()" << endl;
     forAll(points, i)
     {
         // Extract geometry point
@@ -193,6 +194,7 @@ void Foam::fv::actuatorLineSource::createElements()
     // Compute aspect ratio
     aspectRatio_ = totalLength_/chordLength_;
 
+    Info << "Initial velocities in createElements()" << endl;
     // Lookup initial element velocities if present
     List<vector> initialVelocities(nGeometryPoints, vector::zero);
     coeffs_.readIfPresent("initialVelocities", initialVelocities);
@@ -211,6 +213,7 @@ void Foam::fv::actuatorLineSource::createElements()
         Info<< "Tip location: " << tipLocation << endl;
     }
 
+    Info << "Start of element loop in createElements()" << endl;
     forAll(elements_, i)
     {
         std::stringstream ss;
@@ -351,10 +354,12 @@ void Foam::fv::actuatorLineSource::createElements()
             Info<< "Root distance (nondimensional): " << rootDistance << endl;
         }
 
+        Info << "Create element in createElements()" << endl;
         actuatorLineElement* element = new actuatorLineElement
         (
             name, dict, mesh_
         );
+        Info << "End of create element in createElements()" << endl;
         elements_.set(i, element);
         pitch = Foam::degToRad(pitch);
         elements_[i].pitch(pitch);
@@ -527,21 +532,27 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     endEffectsActive_(false),
     applyForce_(true)
 {
+    Info<< "Constructor for actuatorlinemodel:\n";
     read(dict_);
+    Info<< "Constructor for actuatorlinemodel1:\n";
     createElements();
+    Info<< "Constructor for actuatorlinemodel2:\n";
     if (writePerf_)
     {
         createOutputFile();
     }
+    Info<< "Constructor for actuatorlinemodel3:\n";
     if (forceField_.writeOpt() == IOobject::AUTO_WRITE)
     {
         forceField_.write();
     }
     // Calculate end effects
+    Info<< "Constructor for actuatorlinemodel4:\n";
     if (endEffectsActive_)
     {
         calcEndEffects();
     }
+    Info<< "End of constructor for actuatorlinemodel:\n";
 }
 
 

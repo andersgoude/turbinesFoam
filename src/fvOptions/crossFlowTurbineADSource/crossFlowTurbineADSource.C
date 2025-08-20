@@ -194,9 +194,9 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 blades_[i].addSup(eqn, fieldI);
                 forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
-                force_ += blades_[i].force();
+                force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
-                moment += bladeMoments_[i];
+                moment += bladeMultiplier_*bladeMoments_[i];
             }
 
             if (hasStruts_)
@@ -206,8 +206,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 {
                     struts_[i].addSup(eqn, fieldI);
                     forceField_ += (bladeMultiplier_/divisions_)*struts_[i].forceField();
-                    force_ += struts_[i].force();
-                    moment += struts_[i].moment(origin_);
+                    force_ += bladeMultiplier_*struts_[i].force();
+                    moment += bladeMultiplier_*struts_[i].moment(origin_);
                 }
             }
 
@@ -282,9 +282,9 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             {
                 blades_[i].addSup(rho, eqn, fieldI);
                 forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
-                force_ += blades_[i].force();
+                force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
-                moment += bladeMoments_[i];
+                moment += bladeMultiplier_*bladeMoments_[i];
             }
 
             if (hasStruts_)
@@ -294,8 +294,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 {
                     struts_[i].addSup(rho, eqn, fieldI);
                     forceField_ += (bladeMultiplier_/divisions_)*struts_[i].forceField();
-                    force_ += struts_[i].force();
-                    moment += struts_[i].moment(origin_);
+                    force_ += bladeMultiplier_*struts_[i].force();
+                    moment += bladeMultiplier_*struts_[i].moment(origin_);
                 }
             }
 

@@ -67,6 +67,9 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
     read(dict);
     customTime_ = mesh.time().value();
     rotateAD(true);
+    
+    //override the nBlades value for the end effects calculation if bladeMultiplier is used
+    effectiveNBlades_ = bladeMultiplier_*nBlades_; 
     forAll(blades_, i)
     {
         blades_[i].setApplyForce(false);
@@ -207,16 +210,16 @@ void Foam::fv::axialFlowTurbineADSource::addSup
                 blades_[i].addSup(eqn, fieldI);
                 forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
-                force_ += blades_[i].force();
+                force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
-                moment += bladeMoments_[i];
+                moment += bladeMultiplier_*bladeMoments_[i];
             }
 
             if (hasHub_)
             {
                 // Add source for hub actuator line
                 hub_->addSup(eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*hub_->forceField();
+                forceField_ += (1.0/divisions_)*hub_->forceField();
                 force_ += hub_->force();
                 moment += hub_->moment(origin_);
             }
@@ -225,7 +228,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for tower actuator line
                 //tower_->addSup(eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*tower_->forceField();
+                forceField_ += (1.0/divisions_)*tower_->forceField();
                 if (includeTowerDrag_)
                 {
                     force_ += tower_->force();
@@ -236,7 +239,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for tower actuator line
                 //nacelle_->addSup(eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*nacelle_->forceField();
+                forceField_ += (1.0/divisions_)*nacelle_->forceField();
                 if (includeNacelleDrag_)
                 {
                     force_ += nacelle_->force();
@@ -311,16 +314,16 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 blades_[i].addSup(rho, eqn, fieldI);
                 forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
-                force_ += blades_[i].force();
+                force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
-                moment += bladeMoments_[i];
+                moment += bladeMultiplier_*bladeMoments_[i];
             }
 
             if (hasHub_)
             {
                 // Add source for hub actuator line
                 hub_->addSup(rho, eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*hub_->forceField();
+                forceField_ += (1.0/divisions_)*hub_->forceField();
                 force_ += hub_->force();
                 moment += hub_->moment(origin_);
             }
@@ -329,7 +332,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for tower actuator line
                 tower_->addSup(rho, eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*tower_->forceField();
+                forceField_ += (1.0/divisions_)*tower_->forceField();
                 if (includeTowerDrag_)
                 {
                     force_ += tower_->force();
@@ -340,7 +343,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for tower actuator line
                 nacelle_->addSup(rho, eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*nacelle_->forceField();
+                forceField_ += (1.0/divisions_)*nacelle_->forceField();
                 if (includeNacelleDrag_)
                 {
                     force_ += nacelle_->force();

@@ -26,6 +26,7 @@ License
 #include "actuatorLineElement.H"
 #include "addToRunTimeSelectionTable.H"
 #include "geometricOneField.H"
+#include "psiThermo.H"
 #include "fvMatrices.H"
 #include "syncTools.H"
 #include "unitConversion.H"
@@ -90,13 +91,44 @@ void Foam::fv::actuatorLineElement::read()
     }
 
     // Read nu from object registry
-    const dictionary& transportProperties = mesh_.lookupObject<IOdictionary>
+    const IOdictionary* transportProperties = mesh_.findObject<IOdictionary>
     (
         "transportProperties"
     );
+    Info << "transportProperties is " << transportProperties << endl;
     dimensionedScalar nu;
-    transportProperties.lookup("nu") >> nu;
-    nu_ = nu.value();
+    if (transportProperties)
+    {
+        transportProperties->lookup("nu") >> nu;
+        nu_ = nu.value();
+    }
+    else // Attempt to read it from fluidThermophysicalModel instead
+    {
+        autoPtr<Foam::psiThermo> thermo(Foam::psiThermo::New(mesh_));
+
+        if (thermo.valid())
+        {
+            //Info << "fluidThermophysicalModel is initialized!" << endl;
+
+            tmp<volScalarField> muTmp = thermo->mu();  // Store the temporary object
+            tmp<volScalarField> rhoTmp = thermo->rho(); // Store the temporary object
+
+            const volScalarField& mu = muTmp();
+            const volScalarField& rho = rhoTmp();
+
+            volScalarField nu = mu / rho; // Compute kinematic viscosity
+            
+            nu_ = gSum(nu) / nu.size();
+
+            //Info << "Density (rho): " << rho << " kg/m³" << endl;
+            //Info << "Kinematic viscosity (nu): " << nu_ << " m²/s" << endl;
+        }
+        else
+        {
+            FatalErrorInFunction << "Unable to read value for nu, aborting" 
+                                 << exit(FatalError);
+        }
+    }
 
     // Read writePerf switch
     dict_.lookup("writePerf") >> writePerf_;
@@ -348,8 +380,14 @@ void Foam::fv::actuatorLineElement::applyForceField
     scalar invepsilonSqr = 1.0/(epsilon*epsilon);
     scalar internalFactor = 1.0/(Foam::pow(epsilon, 3)
                           * Foam::pow(Foam::constant::mathematical::pi, 1.5));
+                          
+    //const volVectorField meshCells = mesh_.C();
     forAll(mesh_.cells(), cellI)
     {
+        //vector cellPos = meshCells[cellI] - position_;
+    
+        // Compute squared distance manually
+        //scalar dis = cellPos.x()*cellPos.x() + cellPos.y()*cellPos.y() + cellPos.z()*cellPos.z();
         scalar dis = magSqr(mesh_.C()[cellI] - position_);
         if (dis <= sphereRadiusSqr)
         {

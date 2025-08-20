@@ -104,6 +104,9 @@ protected:
 
         //- End effects model name
         word endEffectsModel_;
+        
+        //- Nblades value to use for end effects calculation
+        label effectiveNBlades_;
 
 
     // Protected Member Functions
