@@ -679,18 +679,7 @@ void Foam::fv::axialFlowTurbineALSource::yaw(scalar radians)
             << endl << endl;
     }
 
-    // First, rotate axis
-    rotateVector(axis_, origin_, verticalDirection_, radians);
-
-    forAll(blades_, i)
-    {
-        blades_[i].rotate(origin_, verticalDirection_, radians);
-    }
-
-    if (hasHub_)
-    {
-        hub_->rotate(origin_, verticalDirection_, radians);
-    }
+    rotateBladesAndHub(radians, verticalDirection_);
 }
 
 
