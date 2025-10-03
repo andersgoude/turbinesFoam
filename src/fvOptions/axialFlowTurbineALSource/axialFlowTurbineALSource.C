@@ -598,11 +598,11 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
 
     // Tilt turbine to a static value if specified
     scalar tiltAngle = coeffs_.lookupOrDefault("tiltAngle", 0.0);
-    rotateBladesAndHub(degToRad(tiltAngle),tiltAxis_);
+    tilt(degToRad(tiltAngle));
     
     // Yaw turbine to a static value if specified
     scalar yawAngle = coeffs_.lookupOrDefault("yawAngle", 0.0);
-    rotateBladesAndHub(degToRad(yawAngle),verticalDirection_);
+    yaw(degToRad(yawAngle));
 
     if (debug)
     {
@@ -653,10 +653,10 @@ void Foam::fv::axialFlowTurbineALSource::rotateBladesAndHub(scalar radians, vect
     }
 
     // First, rotate axis
-    rotateVector(axis_, origin_, axis, radians);
+    rotateVector(axis_, vector::zero, axis, radians);
 
     // Second, rotate tilt axis
-    rotateVector(tiltAxis_, origin_, axis, radians);
+    rotateVector(tiltAxis_, vector::zero, axis, radians);
 
     // Third, rotate the blades
     forAll(blades_, i)
@@ -671,12 +671,21 @@ void Foam::fv::axialFlowTurbineALSource::rotateBladesAndHub(scalar radians, vect
     }
 }
 
+void Foam::fv::axialFlowTurbineALSource::tilt(scalar radians)
+{
+    if (debug)
+    {
+        Info<< "Tilting " << name_ << endl;
+    }
+
+    rotateBladesAndHub(radians, tiltAxis_);
+}
+
 void Foam::fv::axialFlowTurbineALSource::yaw(scalar radians)
 {
     if (debug)
     {
-        Info<< "Yawing " << name_ << " " << radians << " radians"
-            << endl << endl;
+        Info<< "Yawing " << name_ << endl;
     }
 
     rotateBladesAndHub(radians, verticalDirection_);

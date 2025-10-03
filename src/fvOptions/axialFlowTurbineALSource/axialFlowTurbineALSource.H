@@ -137,6 +137,9 @@ protected:
 
         //- Rotate the turbine blades and hub about specified axis
         void rotateBladesAndHub(scalar radians, vector axis);
+
+        //- Tilt the turbine, i.e., rotate about tilt axis
+        void tilt(scalar radians);
   
         //- Yaw the turbine, i.e., rotate about vertical axis
         void yaw(scalar radians);
