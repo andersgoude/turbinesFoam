@@ -668,11 +668,10 @@ Foam::scalar Foam::fv::actuatorLineElement::normalRefForce()
 Foam::scalar Foam::fv::actuatorLineElement::inflowRefAngle()
 {
     // Calculate inflow velocity angle in degrees (AFTAL Phi)
-    scalar inflowVelAngleRad = acos
-    (
-        (-relativeVelocity_ & chordRefDirection_)
-        / (mag(relativeVelocity_) * mag(chordRefDirection_))
-    );
+    scalar arg =
+      (-relativeVelocity_ & chordRefDirection_)
+      / (mag(relativeVelocity_) * mag(chordRefDirection_));
+    scalar inflowVelAngleRad = acos(sign(arg)*min(Foam::scalar(1), mag(arg)));
     return radToDeg(inflowVelAngleRad);
 }
 
@@ -718,14 +717,18 @@ void Foam::fv::actuatorLineElement::calculateForce
     relativeVelocity_ = inflowVelocity_ - velocity_;
     Re_ = mag(relativeVelocity_)*chordLength_/nu_;
 
+
     // Calculate angle of attack (radians)
-    scalar angleOfAttackRad = asin((planformNormal_ & relativeVelocity_)
-                            / (mag(planformNormal_)
-                            *  mag(relativeVelocity_)));
+    scalar arg =
+        (-planformNormal_ & relativeVelocity_)
+        / (mag(planformNormal_) * mag(relativeVelocity_));
+    scalar angleOfAttackRad = asin(sign(arg)*min(Foam::scalar(1), mag(arg)));
     scalar angleOfAttackUncorrected = radToDeg(angleOfAttackRad);
     relativeVelocityGeom_ = freeStreamVelocity_ - velocity_;
-    angleOfAttackGeom_ = asin((planformNormal_ & relativeVelocityGeom_)
-                       / (mag(planformNormal_)*mag(relativeVelocityGeom_)));
+    scalar argGeom =
+        (-planformNormal_ & relativeVelocityGeom_)
+        / (mag(planformNormal_) * mag(relativeVelocityGeom_));
+    angleOfAttackGeom_ = asin(sign(argGeom)*min(Foam::scalar(1), mag(argGeom)));
     angleOfAttackGeom_ *= 180.0/pi;
 
     // Apply flow curvature correction to angle of attack
