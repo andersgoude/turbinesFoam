@@ -90,7 +90,7 @@ protected:
         //- Initial azimuthal direction
         vector azimuthalDirection_;
 
-        //- Initial azimuthal direction
+        //- Initial tilt direction
         vector tiltAxis_;
 
         //- Switch to include tower drag in turbine drag coefficient
