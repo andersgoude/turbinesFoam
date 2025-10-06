@@ -66,6 +66,9 @@ void Foam::fv::axialFlowTurbineALSource::createCoordinateSystem()
     // Calculate initial azimuthal or tangential direction
     azimuthalDirection_ = axis_ ^ verticalDirection_;
     azimuthalDirection_ /= mag(azimuthalDirection_);
+
+    // Axis of rotation for tilting the turbine
+    tiltAxis_ = azimuthalDirection_;
 }
 
 
@@ -77,6 +80,8 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
     List<List<scalar> > elementData;
     word modelType = "actuatorLineSource";
     List<scalar> frontalAreas(nBlades); // frontal area from each blade
+    scalar coneAngleDegrees = coeffs_.lookupOrDefault("coneAngle", 0.0);
+    scalar coneAngleRadians = degToRad(coneAngleDegrees);
 
     for (int i = 0; i < nBlades_; i++)
     {
@@ -168,6 +173,8 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
+	    // Cone point towards positive axis direction according to the cone angle
+	    rotateVector(point, origin_, azimuthalDirection_, -coneAngleRadians);
             // Rotate point and initial velocity according to azimuth value
             rotateVector(point, origin_, axis_, azimuthRadians);
             rotateVector
@@ -193,6 +200,8 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             vector spanDirection = chordDirection ^ planformNormal;
             spanDirection /= mag(spanDirection);
 
+	    // Cone span towards positive axis direction according to the cone angle
+	    rotateVector(spanDirection, vector::zero, azimuthalDirection_, -coneAngleRadians);
             // Rotate span and chord directions according to azimuth
             rotateVector(spanDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDirection.x();
@@ -476,9 +485,8 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
             {
                 vector elementVelDir = elementVel / mag(elementVel);
                 scalar relVelOpElementVel = -elementVelDir & relVel;
-                vector rotorPlaneDir = freeStreamDirection_;
+                vector rotorPlaneDir = -axis_;
                 scalar relVelRotorPlane = rotorPlaneDir & relVel;
-                // Note: Does not take yaw into account
                 phi = atan2(relVelRotorPlane, relVelOpElementVel);
             }
             if (debug)
@@ -587,6 +595,10 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     scalar azimuthalOffset = coeffs_.lookupOrDefault("azimuthalOffset", 0.0);
     rotate(degToRad(azimuthalOffset));
 
+    // Tilt turbine to a static value if specified
+    scalar tiltAngle = coeffs_.lookupOrDefault("tiltAngle", 0.0);
+    tilt(degToRad(tiltAngle));
+    
     // Yaw turbine to a static value if specified
     scalar yawAngle = coeffs_.lookupOrDefault("yawAngle", 0.0);
     yaw(degToRad(yawAngle));
@@ -628,27 +640,54 @@ void Foam::fv::axialFlowTurbineALSource::rotate(scalar radians)
     }
 }
 
+void Foam::fv::axialFlowTurbineALSource::rotateBladesAndHub(scalar radians, vector axis)
+{
+    if (debug)
+    {
+        Info<< "Rotating " << name_ << " " << radians << " radians"
+            << endl;
+	Info << "Rotation axis vector: (" << axis.x() << ", " << axis.y()
+	     << ", " << axis.z() << ")" << endl << endl;
+
+    }
+
+    // First, rotate axis
+    rotateVector(axis_, vector::zero, axis, radians);
+
+    // Second, rotate tilt axis
+    rotateVector(tiltAxis_, vector::zero, axis, radians);
+
+    // Third, rotate the blades
+    forAll(blades_, i)
+    {
+        blades_[i].rotate(origin_, axis, radians);
+    }
+
+    // Fourth, rotate the hub
+    if (hasHub_)
+    {
+        hub_->rotate(origin_, axis, radians);
+    }
+}
+
+void Foam::fv::axialFlowTurbineALSource::tilt(scalar radians)
+{
+    if (debug)
+    {
+        Info<< "Tilting " << name_ << endl;
+    }
+
+    rotateBladesAndHub(radians, tiltAxis_);
+}
 
 void Foam::fv::axialFlowTurbineALSource::yaw(scalar radians)
 {
     if (debug)
     {
-        Info<< "Yawing " << name_ << " " << radians << " radians"
-            << endl << endl;
+        Info<< "Yawing " << name_ << endl;
     }
 
-    // First, rotate axis
-    rotateVector(axis_, origin_, verticalDirection_, radians);
-
-    forAll(blades_, i)
-    {
-        blades_[i].rotate(origin_, verticalDirection_, radians);
-    }
-
-    if (hasHub_)
-    {
-        hub_->rotate(origin_, verticalDirection_, radians);
-    }
+    rotateBladesAndHub(radians, verticalDirection_);
 }
 
 
