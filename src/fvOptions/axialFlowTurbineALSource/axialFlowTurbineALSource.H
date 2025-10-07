@@ -140,7 +140,7 @@ protected:
 
         //- Tilt the turbine, i.e., rotate about tilt axis
         void tilt(scalar radians);
-  
+
         //- Yaw the turbine, i.e., rotate about vertical axis
         void yaw(scalar radians);
 
