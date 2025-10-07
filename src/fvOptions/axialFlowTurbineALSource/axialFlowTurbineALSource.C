@@ -500,13 +500,13 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
             {
                 vector elementVelDir = elementVel / mag(elementVel);
                 scalar relVelOpElementVel = -elementVelDir & relVel;
-		vector rotorPlaneDir = axis_;
-		if ((freeStreamDirection_ & axis_) < 0)
-		{
-		    // Rotor plane normal should point in same direction
-		    // as free stream velocity
-		    rotorPlaneDir = -rotorPlaneDir;
-		}
+                vector rotorPlaneDir = axis_;
+                if ((freeStreamDirection_ & axis_) < 0)
+                {
+                    // Rotor plane normal should point in same direction
+                    // as free stream velocity
+                    rotorPlaneDir = -rotorPlaneDir;
+                }
                 scalar relVelRotorPlane = rotorPlaneDir & relVel;
                 phi = atan2(relVelRotorPlane, relVelOpElementVel);
             }
