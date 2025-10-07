@@ -173,8 +173,8 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
-	    // Cone point towards positive axis direction according to the cone angle
-	    rotateVector(point, origin_, azimuthalDirection_, -coneAngleRadians);
+            // Cone point towards positive axis direction according to the cone angle
+            rotateVector(point, origin_, azimuthalDirection_, -coneAngleRadians);
             // Rotate point and initial velocity according to azimuth value
             rotateVector(point, origin_, axis_, azimuthRadians);
             rotateVector
@@ -200,8 +200,14 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             vector spanDirection = chordDirection ^ planformNormal;
             spanDirection /= mag(spanDirection);
 
-	    // Cone span towards positive axis direction according to the cone angle
-	    rotateVector(spanDirection, vector::zero, azimuthalDirection_, -coneAngleRadians);
+            // Cone span towards positive axis direction according to the cone angle
+            rotateVector
+            (
+                spanDirection,
+                vector::zero,
+                azimuthalDirection_,
+                -coneAngleRadians
+            );
             // Rotate span and chord directions according to azimuth
             rotateVector(spanDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDirection.x();
@@ -640,14 +646,18 @@ void Foam::fv::axialFlowTurbineALSource::rotate(scalar radians)
     }
 }
 
-void Foam::fv::axialFlowTurbineALSource::rotateBladesAndHub(scalar radians, vector axis)
+void Foam::fv::axialFlowTurbineALSource::rotateBladesAndHub
+(
+    scalar radians,
+    vector axis
+)
 {
     if (debug)
     {
-        Info<< "Rotating " << name_ << " " << radians << " radians"
-            << endl;
-	Info << "Rotation axis vector: (" << axis.x() << ", " << axis.y()
-	     << ", " << axis.z() << ")" << endl << endl;
+        Info << "Rotating " << name_ << " " << radians << " radians"
+             << endl;
+        Info << "Rotation axis vector: (" << axis.x() << ", " << axis.y()
+             << ", " << axis.z() << ")" << endl << endl;
 
     }
 
