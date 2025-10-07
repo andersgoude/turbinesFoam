@@ -173,8 +173,16 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
-            // Cone point towards positive axis direction according to the cone angle
-            rotateVector(point, origin_, azimuthalDirection_, -coneAngleRadians);
+            
+            // Cone point towards positive axis direction according to the
+            // cone angle
+            rotateVector
+            (
+                point,
+                origin_,
+                azimuthalDirection_,
+                -coneAngleRadians
+            );
             // Rotate point and initial velocity according to azimuth value
             rotateVector(point, origin_, axis_, azimuthRadians);
             rotateVector
@@ -200,7 +208,8 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             vector spanDirection = chordDirection ^ planformNormal;
             spanDirection /= mag(spanDirection);
 
-            // Cone span towards positive axis direction according to the cone angle
+            // Cone span towards positive axis direction according to the
+            // cone angle
             rotateVector
             (
                 spanDirection,
