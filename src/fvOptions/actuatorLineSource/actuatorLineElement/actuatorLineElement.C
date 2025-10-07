@@ -669,9 +669,10 @@ Foam::scalar Foam::fv::actuatorLineElement::inflowRefAngle()
 {
     // Calculate inflow velocity angle in degrees (AFTAL Phi)
     scalar arg =
-      (-relativeVelocity_ & chordRefDirection_)
-      / (mag(relativeVelocity_) * mag(chordRefDirection_));
-    scalar inflowVelAngleRad = acos(sign(arg)*min(Foam::scalar(1.0), mag(arg)));
+        (-relativeVelocity_ & chordRefDirection_)
+        / (mag(relativeVelocity_) * mag(chordRefDirection_));
+    scalar inflowVelAngleRad =
+        acos(sign(arg)*min(Foam::scalar(1.0), mag(arg)));
     return radToDeg(inflowVelAngleRad);
 }
 
@@ -728,7 +729,8 @@ void Foam::fv::actuatorLineElement::calculateForce
     scalar argGeom =
         (-planformNormal_ & relativeVelocityGeom_)
         / (mag(planformNormal_) * mag(relativeVelocityGeom_));
-    angleOfAttackGeom_ = asin(sign(argGeom)*min(Foam::scalar(1.0), mag(argGeom)));
+    angleOfAttackGeom_ =
+        asin(sign(argGeom)*min(Foam::scalar(1.0), mag(argGeom)));
     angleOfAttackGeom_ *= 180.0/pi;
 
     // Apply flow curvature correction to angle of attack
