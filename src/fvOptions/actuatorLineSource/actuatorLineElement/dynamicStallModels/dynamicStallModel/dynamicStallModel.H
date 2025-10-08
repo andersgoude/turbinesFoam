@@ -154,7 +154,12 @@ public:
         // Check
 
         // Edit
-            void setCustomTime(scalar time, scalar deltaT, bool useCustomTime = true);
+            void setCustomTime
+            (
+                scalar time,
+                scalar deltaT,
+                bool useCustomTime = true
+            );
 
         // Evaluation
 
