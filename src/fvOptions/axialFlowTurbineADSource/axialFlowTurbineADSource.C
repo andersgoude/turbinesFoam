@@ -67,8 +67,9 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
     read(dict);
     customTime_ = mesh.time().value();
     rotateAD(true);
-    
-    //override the nBlades value for the end effects calculation if bladeMultiplier is used
+
+    // override the nBlades value for the end effects calculation 
+    // if bladeMultiplier is used
     effectiveNBlades_ = bladeMultiplier_*nBlades_; 
     forAll(blades_, i)
     {
@@ -105,9 +106,9 @@ void Foam::fv::axialFlowTurbineADSource::rotateAD(bool updateOnly)
     
     scalar radians = 2*mathematical::pi/divisions_;
     scalar deltaT = radians/omega_;
-    
+
     //updateOnly is intended for first step only to set custom speed
-    if (!updateOnly) 
+    if (updateOnly == false)
     {
         customTime_ += deltaT;
         rotate(radians);
@@ -116,7 +117,8 @@ void Foam::fv::axialFlowTurbineADSource::rotateAD(bool updateOnly)
     }
     updateTSROmega();
     
-    //Info << "rotateAD called for time " << time_.value() << " custom time: " << customTime_ << endl;
+    //Info << "rotateAD called for time " << time_.value() 
+    //     << " custom time: " << customTime_ << endl;
     forAll(blades_, i)
     {
         blades_[i].setCustomTime(customTime_, deltaT);
@@ -166,7 +168,8 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     const label fieldI
 )
 {
-    // tower and nacelle are not rotating, so we only need to calculate the force field once
+    // tower and nacelle are not rotating,
+    // so we only need to calculate the force field once
     if (hasTower_)
     {
         // Add source for tower actuator line
@@ -186,7 +189,6 @@ void Foam::fv::axialFlowTurbineADSource::addSup
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Zero out force vector and field
-            //forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
             force_ *= 0;
 
             // Check dimensions of force field and correct if necessary
@@ -208,7 +210,8 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].addSup(eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
+                forceField_ +=
+                    (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
                 force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
@@ -250,20 +253,24 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             // not the dummy loops that are used to make dynamic stall converge
             if (currentLoop == dynStallLoop_ - 1)
             {
-                // Torque is the projection of the moment from all blades on the axis
+                // Torque is the projection of the moment from
+                // all blades on the axis
                 torque_ = moment & axis_;
 
-                torqueCoefficient_ = torque_/(0.5*frontalArea_*rotorRadius_
-                                   * magSqr(freeStreamVelocity_));
+                torqueCoefficient_ =
+                    torque_/(0.5*frontalArea_*rotorRadius_
+                    * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = force_ & freeStreamDirection_
-                                 / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
+                dragCoefficient_ = 
+                    force_ & freeStreamDirection_
+                    / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
-                
+
                 // Print performance to terminal
                 printPerf();
 
-                // Write performance data -- note this will write multiples if there are
+                // Write performance data
+                // Note this will write multiples if there are
                 // multiple PIMPLE loops
                 if (Pstream::master())
                 {
@@ -288,7 +295,8 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        forceField_ *=
+            dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Zero out force vector and field
@@ -313,7 +321,8 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].addSup(rho, eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
+                forceField_ +=
+                    (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
                 moment += bladeMultiplier_*bladeMoments_[i];
@@ -352,22 +361,25 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             
             if (currentLoop == dynStallLoop_ - 1)
             {
-                // Torque is the projection of the moment from all blades on the axis
+                // Torque is the projection of the moment from all blades
+                // on the axis
                 torque_ = moment & axis_;
 
                 scalar rhoRef;
                 coeffs_.lookup("rhoRef") >> rhoRef;
-                torqueCoefficient_ = torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
-                                   * magSqr(freeStreamVelocity_));
+                torqueCoefficient_ = 
+                    torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
+                    * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = force_ & freeStreamDirection_
-                                 / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
+                dragCoefficient_ = 
+                    force_ & freeStreamDirection_
+                    / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
 
                 // Print performance to terminal
                 printPerf();
 
-                // Write performance data -- note this will write multiples if there are
-                // multiple PIMPLE loops
+                // Write performance data -- note this will write multiples
+                // if there are multiple PIMPLE loops
                 if (Pstream::master())
                 {
                     writePerf();
@@ -390,7 +402,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());// = dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
         kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
