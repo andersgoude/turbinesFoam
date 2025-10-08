@@ -97,12 +97,11 @@ Foam::fv::crossFlowTurbineADSource::~crossFlowTurbineADSource()
 
 void Foam::fv::crossFlowTurbineADSource::rotateAD(bool updateOnly)
 {
-    
     scalar radians = 2*mathematical::pi/divisions_;
     scalar deltaT = radians/omega_;
-    
+
     //updateOnly is intended for first step only to set custom speed
-    if (!updateOnly) 
+    if (updateOnly == false) 
     {
         customTime_ += deltaT;
         rotate(radians);
@@ -111,7 +110,8 @@ void Foam::fv::crossFlowTurbineADSource::rotateAD(bool updateOnly)
     }
     updateTSROmega();
     
-    //Info << "rotateAD called for time " << time_.value() << " custom time: " << customTime_ << endl;
+    // Info << "rotateAD called for time " << time_.value()
+    // << " custom time: " << customTime_ << endl;
     forAll(blades_, i)
     {
         blades_[i].setCustomTime(customTime_, deltaT);
@@ -176,7 +176,6 @@ void Foam::fv::crossFlowTurbineADSource::addSup
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Zero out force vector and field
-            //forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
             force_ *= 0;
 
             // Check dimensions of force field and correct if necessary
@@ -192,7 +191,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].addSup(eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
+                forceField_ +=
+                    (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
                 force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
@@ -205,7 +205,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 forAll(struts_, i)
                 {
                     struts_[i].addSup(eqn, fieldI);
-                    forceField_ += (bladeMultiplier_/divisions_)*struts_[i].forceField();
+                    forceField_ +=
+                        (bladeMultiplier_/divisions_)*struts_[i].forceField();
                     force_ += bladeMultiplier_*struts_[i].force();
                     moment += bladeMultiplier_*struts_[i].moment(origin_);
                 }
@@ -224,20 +225,24 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             // not the dummy loops that are used to make dynamic stall converge
             if (currentLoop == dynStallLoop_ - 1)
             {
-                // Torque is the projection of the moment from all blades on the axis
+                // Torque is the projection of the moment from
+                // all blades on the axis
                 torque_ = moment & axis_;
 
-                torqueCoefficient_ = torque_/(0.5*frontalArea_*rotorRadius_
-                                   * magSqr(freeStreamVelocity_));
+                torqueCoefficient_ = 
+                    torque_/(0.5*frontalArea_*rotorRadius_
+                    * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = force_ & freeStreamDirection_
-                                 / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
+                dragCoefficient_ = 
+                    force_ & freeStreamDirection_
+                    / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
-                
+
                 // Print performance to terminal
                 printPerf();
 
-                // Write performance data -- note this will write multiples if there are
+                // Write performance data
+                // Note this will write multiples if there are
                 // multiple PIMPLE loops
                 if (Pstream::master())
                 {
@@ -281,7 +286,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].addSup(rho, eqn, fieldI);
-                forceField_ += (bladeMultiplier_/divisions_)*blades_[i].forceField();
+                forceField_ +=
+                    (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 force_ += bladeMultiplier_*blades_[i].force();
                 bladeMoments_[i] = blades_[i].moment(origin_);
                 moment += bladeMultiplier_*bladeMoments_[i];
@@ -293,7 +299,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 forAll(struts_, i)
                 {
                     struts_[i].addSup(rho, eqn, fieldI);
-                    forceField_ += (bladeMultiplier_/divisions_)*struts_[i].forceField();
+                    forceField_ +=
+                        (bladeMultiplier_/divisions_)*struts_[i].forceField();
                     force_ += bladeMultiplier_*struts_[i].force();
                     moment += bladeMultiplier_*struts_[i].moment(origin_);
                 }
@@ -310,21 +317,25 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             
             if (currentLoop == dynStallLoop_ - 1)
             {
-                // Torque is the projection of the moment from all blades on the axis
+                // Torque is the projection of the moment from 
+                // all blades on the axis
                 torque_ = moment & axis_;
 
                 scalar rhoRef;
                 coeffs_.lookup("rhoRef") >> rhoRef;
-                torqueCoefficient_ = torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
-                                   * magSqr(freeStreamVelocity_));
+                torqueCoefficient_ =
+                    torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
+                    * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = force_ & freeStreamDirection_
-                                 / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
+                dragCoefficient_ =
+                    force_ & freeStreamDirection_
+                    / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
 
                 // Print performance to terminal
                 printPerf();
 
-                // Write performance data -- note this will write multiples if there are
+                // Write performance data
+                // Note this will write multiples if there are
                 // multiple PIMPLE loops
                 if (Pstream::master())
                 {
@@ -348,9 +359,9 @@ void Foam::fv::crossFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());// = dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
         kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-        fvMatrix<scalar> kFieldShaft(eqn.psi(), eqn.dimensions());// = dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        fvMatrix<scalar> kFieldShaft(eqn.psi(), eqn.dimensions());
         kFieldShaft *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
@@ -376,7 +387,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             }
             rotateAD();
         }
-        eqn += (bladeMultiplier_/divisions_)*kField + (1.0/divisions_)*kFieldShaft;
+        eqn += (bladeMultiplier_/divisions_)*kField
+               + (1.0/divisions_)*kFieldShaft;
     }
 }
 
