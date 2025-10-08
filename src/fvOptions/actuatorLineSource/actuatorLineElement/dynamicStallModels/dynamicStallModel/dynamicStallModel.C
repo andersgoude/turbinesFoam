@@ -181,7 +181,12 @@ Foam::fv::dynamicStallModel::~dynamicStallModel()
 // * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * * //
 
 
-void Foam::fv::dynamicStallModel::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+void Foam::fv::dynamicStallModel::setCustomTime
+(
+    scalar time,
+    scalar deltaT,
+    bool useCustomTime
+)
 {
     customTime_ = time;
     customDeltaT_ = deltaT;
