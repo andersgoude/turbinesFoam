@@ -637,7 +637,12 @@ void Foam::fv::actuatorLineSource::setOmega(scalar omega)
 }
 
 
-void Foam::fv::actuatorLineSource::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+void Foam::fv::actuatorLineSource::setCustomTime
+(
+    scalar time,
+    scalar deltaT,
+    bool useCustomTime
+)
 {
     forAll(elements_, i)
     {
@@ -723,7 +728,7 @@ void Foam::fv::actuatorLineSource::addSup
 
     // Add source to eqn
     if (applyForce_)
-    { 
+    {
         eqn += forceField_;
     }
 
@@ -795,7 +800,7 @@ void Foam::fv::actuatorLineSource::addSup
 
     // Add source to eqn
     if (applyForce_)
-    { 
+    {
         eqn += forceField_;
     }
 
