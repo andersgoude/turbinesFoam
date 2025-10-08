@@ -171,7 +171,12 @@ void Foam::addedMassModel::correct
 }
 
 
-void Foam::addedMassModel::setCustomTime(scalar time, scalar deltaT, bool useCustomTime)
+void Foam::addedMassModel::setCustomTime
+(
+    scalar time,
+    scalar deltaT,
+    bool useCustomTime
+)
 {
     customTime_ = time;
     customDeltaT_ = deltaT;
