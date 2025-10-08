@@ -149,7 +149,12 @@ public:
 
 
         // Write
-            void setCustomTime(scalar time, scalar deltaT, bool useCustomTime = true);
+            void setCustomTime
+            (
+                scalar time,
+                scalar deltaT,
+                bool useCustomTime = true
+            );
 
 };
 
