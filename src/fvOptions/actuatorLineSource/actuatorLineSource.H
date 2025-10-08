@@ -119,7 +119,7 @@ protected:
 
         //- Switch for correcting end effects
         bool endEffectsActive_;
-      
+
         //- Apply the force directly from this function
         bool applyForce_;
 
@@ -212,10 +212,15 @@ public:
             //- Set rotational velocity of all elements for flow curvature
             //  correction
             void setOmega(scalar omega);
-            
-            //- Set a time value that is not the simulation time, for actuator disc
-            //  simulations to get correct derivatives
-            void setCustomTime(scalar time, scalar deltaT, bool useCustomTime = true);
+
+            //- Set a time value that is not the simulation time,
+            //  for actuator disc simulations to get correct derivatives
+            void setCustomTime
+            (
+                scalar time,
+                scalar deltaT,
+                bool useCustomTime = true
+            );
 
             void setApplyForce(bool active);
 
