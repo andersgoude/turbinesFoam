@@ -169,18 +169,18 @@ Foam::label Foam::fv::actuatorLineElement::findCell
         // Make decision global
         reduce(mayContain, orOp<bool>());
 
-        if (!mayContain)
+        if (mayContain == false)
         {
             return -1;   // no rank will call findCell()
         }
 
         // Now ALL ranks call it
         return mesh_.findCell(location);
-        }
-        else
-        {
-            return mesh_.findCell(location);;
-        }
+    }
+    else
+    {
+        return mesh_.findCell(location);;
+    }
 }
 
 
@@ -405,7 +405,7 @@ void Foam::fv::actuatorLineElement::constructInfluenceCellList
     scalar sphereRadius = chordLength_ + projectionRadius;
     scalar sphereRadiusSqr = sphereRadius*sphereRadius;
     
-    // temporary list for 
+    // temporary list for
     DynamicList<label> cells;
     
     const vectorField& C = mesh_.C();
