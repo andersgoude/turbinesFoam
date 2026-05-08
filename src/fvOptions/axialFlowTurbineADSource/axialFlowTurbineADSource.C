@@ -69,9 +69,9 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
     customTime_ = mesh.time().value();
     rotateAD(true);
 
-    // override the nBlades value for the end effects calculation 
+    // override the nBlades value for the end effects calculation
     // if bladeMultiplier is used
-    effectiveNBlades_ = bladeMultiplier_*nBlades_; 
+    effectiveNBlades_ = bladeMultiplier_*nBlades_;
     forAll(blades_, i)
     {
         blades_[i].setApplyForce(false);
@@ -108,7 +108,6 @@ Foam::fv::axialFlowTurbineADSource::~axialFlowTurbineADSource()
 
 void Foam::fv::axialFlowTurbineADSource::rotateAD(bool updateOnly)
 {
-    
     scalar radians = 2*mathematical::pi/divisions_;
     scalar deltaT = radians/omega_;
 
@@ -121,19 +120,19 @@ void Foam::fv::axialFlowTurbineADSource::rotateAD(bool updateOnly)
         //lastRotationTime_ = time_.value();
     }
     updateTSROmega();
-    
-    //Info << "rotateAD called for time " << time_.value() 
+
+    //Info << "rotateAD called for time " << time_.value()
     //     << " custom time: " << customTime_ << endl;
     forAll(blades_, i)
     {
         blades_[i].setCustomTime(customTime_, deltaT);
     }
-    
+
     if (hasHub_)
     {
         hub_->setCustomTime(customTime_, deltaT);
     }
-    
+
     if (hasTower_)
     {
         tower_->setCustomTime(customTime_, deltaT);
@@ -200,7 +199,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        //forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        //forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0);
         forceField_.primitiveFieldRef() = vector::zero;
         forceField_.correctBoundaryConditions();
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
@@ -280,7 +279,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
                     torque_/(0.5*frontalArea_*rotorRadius_
                     * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = 
+                dragCoefficient_ =
                     force_ & freeStreamDirection_
                     / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
@@ -387,7 +386,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
                     force_ += nacelle_->force();
                 }
             }
-            
+
             if (currentLoop == dynStallLoop_ - 1)
             {
                 // Torque is the projection of the moment from all blades
@@ -396,11 +395,11 @@ void Foam::fv::axialFlowTurbineADSource::addSup
 
                 scalar rhoRef;
                 coeffs_.lookup("rhoRef") >> rhoRef;
-                torqueCoefficient_ = 
+                torqueCoefficient_ =
                     torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
                     * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = 
+                dragCoefficient_ =
                     force_ & freeStreamDirection_
                     / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
 
