@@ -289,7 +289,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        // forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0);
+        //forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0);
         forceField_.primitiveFieldRef() = vector::zero;
         forceField_.correctBoundaryConditions();
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
