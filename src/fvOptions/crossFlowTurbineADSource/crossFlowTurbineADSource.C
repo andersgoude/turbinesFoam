@@ -106,7 +106,7 @@ void Foam::fv::crossFlowTurbineADSource::rotateAD(bool updateOnly)
     scalar deltaT = radians/omega_;
 
     //updateOnly is intended for first step only to set custom speed
-    if (updateOnly == false) 
+    if (updateOnly == false)
     {
         customTime_ += deltaT;
         rotate(radians);
@@ -183,7 +183,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        //forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0)
+        //forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0)
         forceField_.primitiveFieldRef() = vector::zero;
         forceField_.correctBoundaryConditions();
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
@@ -245,11 +245,11 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 // all blades on the axis
                 torque_ = moment & axis_;
 
-                torqueCoefficient_ = 
+                torqueCoefficient_ =
                     torque_/(0.5*frontalArea_*rotorRadius_
                     * magSqr(freeStreamVelocity_));
                 powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ = 
+                dragCoefficient_ =
                     force_ & freeStreamDirection_
                     / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
@@ -289,7 +289,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
         // forceField_ should be the average during one revolution here
-        // forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        // forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0);
         forceField_.primitiveFieldRef() = vector::zero;
         forceField_.correctBoundaryConditions();
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
@@ -344,7 +344,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             
             if (currentLoop == dynStallLoop_ - 1)
             {
-                // Torque is the projection of the moment from 
+                // Torque is the projection of the moment from
                 // all blades on the axis
                 torque_ = moment & axis_;
 
