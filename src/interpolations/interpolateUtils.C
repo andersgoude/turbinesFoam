@@ -134,9 +134,10 @@ scalar Foam::interpolateUtils::interpolate1D
 )
 {
     // Index is known
+    scalar part = getPart(xNew, xList, xIndex);
     return interpolate1D
     (
-        getPart(xNew, xList, xIndex),
+        part,
         data,
         xIndex
     );
@@ -185,10 +186,12 @@ scalar Foam::interpolateUtils::interpolate2D
 )
 {
     // Index values are known
+    scalar xPart = getPart(xNew, xList, xIndex);
+    scalar yPart = getPart(yNew, yList, yIndex);
     return interpolate2D
     (
-        getPart(xNew, xList, xIndex),
-        getPart(yNew, yList, yIndex),
+        xPart,
+        yPart,
         data,
         xIndex,
         yIndex
