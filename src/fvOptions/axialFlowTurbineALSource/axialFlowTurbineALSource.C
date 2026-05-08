@@ -548,7 +548,10 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
                 scalar c2;
                 endEffectsCoeffs.lookup("c2") >> c2;
                 scalar g =
-                    Foam::exp(-c1*(effectiveNBlades_*tipSpeedRatio_ - c2)) + 0.1;
+                    Foam::exp
+                    (
+                        -c1*(effectiveNBlades_*tipSpeedRatio_ - c2)
+                    ) + 0.1;
                 if (endEffectsCoeffs.lookupOrDefault("tipEffects", true))
                 {
                     scalar acosArg = Foam::exp
