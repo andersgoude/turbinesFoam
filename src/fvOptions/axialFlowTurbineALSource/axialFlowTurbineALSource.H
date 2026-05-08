@@ -90,6 +90,9 @@ protected:
         //- Initial azimuthal direction
         vector azimuthalDirection_;
 
+        //- Initial tilt direction
+        vector tiltAxis_;
+
         //- Switch to include tower drag in turbine drag coefficient
         bool includeTowerDrag_;
 
@@ -131,6 +134,12 @@ protected:
 
         //- Rotate the turbine a specified angle about its axis
         virtual void rotate(scalar radians);
+
+        //- Rotate the turbine blades and hub about specified axis
+        void rotateBladesAndHub(scalar radians, vector axis);
+
+        //- Tilt the turbine, i.e., rotate about tilt axis
+        void tilt(scalar radians);
 
         //- Yaw the turbine, i.e., rotate about vertical axis
         void yaw(scalar radians);
