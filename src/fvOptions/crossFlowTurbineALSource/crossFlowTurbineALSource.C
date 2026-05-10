@@ -114,9 +114,8 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             scalar chordMount = elementData[j][4];
             scalar pitch = elementData[j][5];
             // Read cone angle (from rotation axis) in degrees if present
-            scalar cone = (
-                elementData.size() > j && elementData[j].size() > 6
-            ) ? elementData[j][6] : 0.0;
+            // or calculate it from the element data
+            scalar cone = calculateCone(elementData, j);
 
             // Compute frontal area contribution from this geometry segment
             if (j > 0)
@@ -169,8 +168,8 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             // Set span directions for AL source
             // Initialize span direction and take into account cone angle
             vector spanDir = (
-                cos(degToRad(cone))*axis_
-                + sin(degToRad(cone))*radialDirection_
+                cos(cone)*axis_
+                + sin(cone)*radialDirection_
             );
             rotateVector(spanDir, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDir.x(); // x component of span dir
@@ -312,6 +311,10 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             scalar chordMount = elementData[j][4];
             scalar pitch = elementData[j][5];
 
+            // Read cone angle (from rotation axis) in degrees if present
+            // or calculate it from the element data
+            scalar cone = calculateCone(elementData, j);
+
             // Set sizes for actuatorLineSource elementGeometry lists
             elementGeometry[j].setSize(6);
             elementGeometry[j][0].setSize(3);
@@ -353,7 +356,10 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             elementGeometry[j][0][2] = point.z(); // z location of geom point
 
             // Set span directions for AL source (in radial direction)
-            vector spanDirection = radialDirection_;
+            vector spanDirection = (
+                cos(cone)*axis_
+                + sin(cone)*radialDirection_
+            );
             rotateVector(spanDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDirection.x();
             elementGeometry[j][1][1] = spanDirection.y();

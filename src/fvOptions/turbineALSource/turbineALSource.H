@@ -164,6 +164,13 @@ protected:
             scalar radians
         );
 
+        //- Calculate the cone angle from elementdata
+        scalar calculateCone
+        (
+            const List<List<scalar>>& elementData,
+            const label j
+        );
+
         //- Create actuator lines for blades
         virtual void createBlades();
 
