@@ -374,7 +374,8 @@ void Foam::fv::actuatorLineElement::multiplyForceRho
 
 void Foam::fv::actuatorLineElement::applyForceField
 (
-    volVectorField& forceField
+    volVectorField& forceField,
+    scalar scale
 )
 {
     // Calculate projection width
@@ -385,7 +386,7 @@ void Foam::fv::actuatorLineElement::applyForceField
     scalar sphereRadius = chordLength_ + projectionRadius;
     scalar sphereRadiusSqr = sphereRadius*sphereRadius;
     scalar invepsilonSqr = 1.0/(epsilon*epsilon);
-    scalar internalFactor = 1.0/(Foam::pow(epsilon, 3)
+    scalar internalFactor = scale/(Foam::pow(epsilon, 3)
                           * Foam::pow(Foam::constant::mathematical::pi, 1.5));
 
     const vectorField& C = mesh_.C();
@@ -397,7 +398,7 @@ void Foam::fv::actuatorLineElement::applyForceField
             scalar dis = magSqr(C[cellI] - position_);
             if (dis <= sphereRadiusSqr)
             {
-                scalar factor = 1*Foam::exp(-dis*invepsilonSqr)*internalFactor;
+                scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
                 // forceField is opposite forceVector
                 forceField[cellI] += -forceVector_*factor;
             }
@@ -412,7 +413,7 @@ void Foam::fv::actuatorLineElement::applyForceField
             scalar dis = magSqr(C[cellI] - position_);
             if (dis <= sphereRadiusSqr)
             {
-                scalar factor = 1*Foam::exp(-dis*invepsilonSqr)*internalFactor;
+                scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
                 // forceField is opposite forceVector
                 forceField[cellI] += -forceVector_*factor;
             }
@@ -1113,7 +1114,8 @@ Foam::vector Foam::fv::actuatorLineElement::moment(vector point)
 void Foam::fv::actuatorLineElement::addForce
 (
     const interpolationCellPoint<vector>& UInterp,
-    volVectorField& forceField
+    volVectorField& forceField,
+    scalar scale
 )
 {
     /*volVectorField forceFieldI
@@ -1135,9 +1137,12 @@ void Foam::fv::actuatorLineElement::addForce
 
     //const volVectorField& Uin(eqn.psi());
     
+    for (int lt = 0; lt < 1; lt++)
+    {
+        calculateForce(UInterp);
+        applyForceField(forceField, scale);
+    }
     
-    calculateForce(UInterp);
-    applyForceField(forceField);
 
     // Add force to total actuator line force
     //forceField += forceFieldI;
@@ -1154,7 +1159,8 @@ void Foam::fv::actuatorLineElement::addForce
 (
     const volScalarField& rho,
     const interpolationCellPoint<vector>& UInterp,
-    volVectorField& forceField
+    volVectorField& forceField,
+    scalar scale
 )
 {
     /*volVectorField forceFieldI
@@ -1176,10 +1182,7 @@ void Foam::fv::actuatorLineElement::addForce
 
     //const volVectorField& Uin(eqn.psi());
     calculateForce(UInterp);
-    for (int li = 0; li < 1; li++)
-    {
-        applyForceField(forceField);
-    }
+    applyForceField(forceField, scale);
 
     // Multiply force vector by local density
     multiplyForceRho(rho);

@@ -253,7 +253,9 @@ public:
             (
                 fvMatrix<vector>& eqn,
                 interpolationCellPoint<vector>& UInterp,
-                const label fieldI
+                volVectorField& forceField,
+                const label fieldI,
+                scalar scale
             );
 
             //- Source term to momentum equation
@@ -277,7 +279,9 @@ public:
                 const volScalarField& rho,
                 fvMatrix<vector>& eqn,
                 interpolationCellPoint<vector>& UInterp,
-                const label fieldI
+                volVectorField& forceField,
+                const label fieldI,
+                scalar scale
             );
 
             //- Source term to compressible momentum equation

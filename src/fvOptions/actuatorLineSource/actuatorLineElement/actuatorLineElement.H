@@ -243,7 +243,8 @@ protected:
         //- Apply force field based on force vector
         void applyForceField
         (
-            volVectorField& forceField
+            volVectorField& forceField,
+            scalar scale
         );
 
 
@@ -454,7 +455,8 @@ public:
             virtual void addForce
             (
                 const interpolationCellPoint<vector>& UInterp,
-                volVectorField& force
+                volVectorField& force,
+                scalar scale
             );
 
             //- Add source term to turbulence quantity
@@ -465,7 +467,8 @@ public:
             (
                 const volScalarField& rho,
                 const interpolationCellPoint<vector>& UInterp,
-                volVectorField& force
+                volVectorField& force,
+                scalar scale
             );
 
 };

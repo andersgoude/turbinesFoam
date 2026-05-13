@@ -602,9 +602,9 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addForce(eqn, UInterp, fieldI);
+        blades_[i].addForce(eqn, UInterp, forceField_, fieldI, 1.0);
         forceField_ += blades_[i].forceField();
-        Info<< "Added blade" << endl;
+        //Info<< "Added blade" << endl;
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
         moment += bladeMoments_[i];
@@ -615,7 +615,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
         // Add source for strut actuator lines
         forAll(struts_, i)
         {
-            struts_[i].addForce(eqn, UInterp, fieldI);
+            struts_[i].addForce(eqn, UInterp, forceField_, fieldI, 1.0);
             forceField_ += struts_[i].forceField();
             force_ += struts_[i].force();
             moment += struts_[i].moment(origin_);
@@ -625,7 +625,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     if (hasShaft_)
     {
         // Add source for shaft actuator line
-        shaft_->addForce(eqn, UInterp, fieldI);
+        shaft_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
         forceField_ += shaft_->forceField();
         force_ += shaft_->force();
         moment += shaft_->moment(origin_);
@@ -685,7 +685,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addForce(rho, eqn, UInterp, fieldI);
+        blades_[i].addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
         forceField_ += blades_[i].forceField();
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
@@ -697,7 +697,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
         // Add source for strut actuator lines
         forAll(struts_, i)
         {
-            struts_[i].addForce(rho, eqn, UInterp, fieldI);
+            struts_[i].addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
             forceField_ += struts_[i].forceField();
             force_ += struts_[i].force();
             moment += struts_[i].moment(origin_);
@@ -707,7 +707,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     if (hasShaft_)
     {
         // Add source for shaft actuator line
-        shaft_->addForce(rho, eqn, UInterp, fieldI);
+        shaft_->addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
         forceField_ += shaft_->forceField();
         force_ += shaft_->force();
         moment += shaft_->moment(origin_);
