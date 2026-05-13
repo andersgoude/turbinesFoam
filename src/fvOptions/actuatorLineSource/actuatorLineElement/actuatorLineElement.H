@@ -185,6 +185,9 @@ protected:
 
         //- Nondimensional distance from actuator line root
         scalar rootDistance_;
+        
+        //- cone angle of the blade for use by curvature correction
+        scalar cone_;
 
         //- End effect correction factor [0, 1]
         scalar endEffectFactor_;

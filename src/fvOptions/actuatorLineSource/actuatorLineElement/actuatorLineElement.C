@@ -57,6 +57,7 @@ void Foam::fv::actuatorLineElement::read()
     dict_.lookup("freeStreamVelocity") >> freeStreamVelocity_;
     freeStreamDirection_ = freeStreamVelocity_/mag(freeStreamVelocity_);
     dict_.lookup("rootDistance") >> rootDistance_;
+    dict_.lookup("cone") >> cone_;
     dict_.lookup("velocitySampleRadius") >> velocitySampleRadius_;
     dict_.lookup("nVelocitySamples") >> nVelocitySamples_;
 
@@ -109,6 +110,7 @@ void Foam::fv::actuatorLineElement::read()
         Info<< "chordDirection: " << chordDirection_ << endl;
         Info<< "spanLength: " << spanLength_ << endl;
         Info<< "spanDirection: " << spanDirection_ << endl;
+        Info<< "cone: " << cone_ << endl;
         Info<< "writePerf: " << writePerf_ << endl;
     }
 }
@@ -286,7 +288,8 @@ void Foam::fv::actuatorLineElement::correctFlowCurvature
 
     if (flowCurvatureModelName_ == "Goude")
     {
-        angleOfAttackRad += omega_*chordLength_/(2*mag(relativeVelocity_));
+        angleOfAttackRad +=
+            omega_*chordLength_/(2*mag(relativeVelocity_))*cos(cone_);
     }
     else if (flowCurvatureModelName_ == "MandalBurton")
     {

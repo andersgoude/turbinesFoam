@@ -126,13 +126,14 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             }
 
             // Set sizes for actuatorLineSource elementGeometry lists
-            elementGeometry[j].setSize(6);
+            elementGeometry[j].setSize(7);
             elementGeometry[j][0].setSize(3);
             elementGeometry[j][1].setSize(3);
             elementGeometry[j][2].setSize(1);
             elementGeometry[j][3].setSize(3);
             elementGeometry[j][4].setSize(1);
             elementGeometry[j][5].setSize(1);
+            elementGeometry[j][6].setSize(1);
 
             // Create geometry point for AL source at origin
             vector point = origin_;
@@ -191,6 +192,9 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
 
             // Set pitch
             elementGeometry[j][5][0] = pitch;
+            
+            // Set cone
+            elementGeometry[j][6][0] = cone;
         }
 
         // Add frontal area to list
@@ -316,13 +320,14 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             scalar cone = calculateCone(elementData, j);
 
             // Set sizes for actuatorLineSource elementGeometry lists
-            elementGeometry[j].setSize(6);
+            elementGeometry[j].setSize(7);
             elementGeometry[j][0].setSize(3);
             elementGeometry[j][1].setSize(3);
             elementGeometry[j][2].setSize(1);
             elementGeometry[j][3].setSize(3);
             elementGeometry[j][4].setSize(1);
             elementGeometry[j][5].setSize(1);
+            elementGeometry[j][6].setSize(1);
 
             // Create geometry point for AL source at origin
             vector point = origin_;
@@ -380,6 +385,9 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
 
             // Set pitch
             elementGeometry[j][5][0] = pitch;
+            
+            // Set pitch
+            elementGeometry[j][6][0] = cone;
         }
 
         if (debug)

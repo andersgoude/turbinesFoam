@@ -149,6 +149,7 @@ void Foam::fv::actuatorLineSource::createElements()
     List<vector> chordRefDirs(nGeometryPoints);
     List<scalar> pitches(nGeometryPoints);
     List<scalar> chordMounts(nGeometryPoints);
+    List<scalar> coneAngles(nGeometryPoints);
     totalLength_ = 0.0;
     chordLength_ = 0.0;
 
@@ -181,6 +182,10 @@ void Foam::fv::actuatorLineSource::createElements()
         chordMounts[i] = elementGeometry_[i][4][0];
         // Read pitch
         pitches[i] = elementGeometry_[i][5][0];
+        // coneAngle of 90 degrees means a horizontal axis turbine here
+        coneAngles[i] = 
+            elementGeometry_[i].size() > 6 ? elementGeometry_[i][6][0] :
+            Foam::constant::mathematical::pi/2;
     }
 
     // Store blade root and tip locations for distance calculations
@@ -232,6 +237,7 @@ void Foam::fv::actuatorLineSource::createElements()
         vector spanDirection;
         scalar pitch;
         scalar chordMount;
+        scalar cone;
         vector initialVelocity;
 
         // Linearly interpolate position
@@ -288,6 +294,13 @@ void Foam::fv::actuatorLineSource::createElements()
         chordDirection = chordDir1
                        + deltaChordDirTotal/nElementsPerSegment*pointIndex
                        + deltaChordDirTotal/nElementsPerSegment/2;
+                       
+        // Linearly interpolate cone angle
+        scalar cone1 = coneAngles[geometrySegmentIndex];
+        scalar cone2 = coneAngles[geometrySegmentIndex + 1];
+        scalar deltaConeTotal = cone2 - cone1;
+        cone = cone1 + deltaConeTotal/nElementsPerSegment*pointIndex
+             + deltaConeTotal/nElementsPerSegment/2;
 
         // Chord reference direction (before pitching)
         chordRefDirection = chordDirection;
@@ -309,6 +322,7 @@ void Foam::fv::actuatorLineSource::createElements()
         dict.add("freeStreamVelocity", freeStreamVelocity_);
         dict.add("chordMount", chordMount);
         dict.add("rootDistance", rootDistance);
+        dict.add("cone", cone);
         dict.add("addedMass", coeffs_.lookupOrDefault("addedMass", false));
         dict.add
         (
