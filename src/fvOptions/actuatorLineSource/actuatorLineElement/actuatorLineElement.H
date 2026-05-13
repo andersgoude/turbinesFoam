@@ -120,6 +120,12 @@ protected:
         //- Inflow velocity
         vector inflowVelocity_;
 
+        //- Previously found cell, to prevent unnecessary lookups
+        label previousCellI_;
+
+        //- Previously found cell, to prevent unnecessary lookups
+        label previousProcI_;
+
         //- Relative flow velocity
         vector relativeVelocity_;
 
@@ -242,7 +248,10 @@ protected:
 
 
         //- Get inflow velocity
-        void calculateInflowVelocity(const volVectorField& Uin);
+        void calculateInflowVelocity
+        (
+            const interpolationCellPoint<vector>& UInterp
+        );
 
         //- Create the performance output file
         virtual void createOutputFile();
@@ -429,7 +438,7 @@ public:
             //- Calculate forces
             void calculateForce
             (
-                const volVectorField& Uin
+                const interpolationCellPoint<vector>& UInterp
             );
 
             //- Read coefficient data
@@ -442,9 +451,9 @@ public:
         // Source term addition
 
             //- Source term to momentum equation
-            virtual void addSup
+            virtual void addForce
             (
-                fvMatrix<vector>& eqn,
+                const interpolationCellPoint<vector>& UInterp,
                 volVectorField& force
             );
 
@@ -452,10 +461,10 @@ public:
             virtual void addTurbulence(fvMatrix<scalar>& eqn, word fieldName);
 
             //- Source term to compressible momentum equation
-            virtual void addSup
+            virtual void addForce
             (
                 const volScalarField& rho,
-                fvMatrix<vector>& eqn,
+                const interpolationCellPoint<vector>& UInterp,
                 volVectorField& force
             );
 

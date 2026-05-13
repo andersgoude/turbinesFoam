@@ -248,6 +248,15 @@ public:
         // Source term addition
 
             //- Source term to momentum equation
+            // addForce assumes that UInterp is already avaiable
+            virtual void addForce
+            (
+                fvMatrix<vector>& eqn,
+                interpolationCellPoint<vector>& UInterp,
+                const label fieldI
+            );
+
+            //- Source term to momentum equation
             virtual void addSup
             (
                 fvMatrix<vector>& eqn,
@@ -258,6 +267,16 @@ public:
             virtual void addSup
             (
                 fvMatrix<scalar>& eqn,
+                const label fieldI
+            );
+
+            //- Source term to compressible momentum equation
+            // addForce assumes that UInterp is already avaiable
+            virtual void addForce
+            (
+                const volScalarField& rho,
+                fvMatrix<vector>& eqn,
+                interpolationCellPoint<vector>& UInterp,
                 const label fieldI
             );
 

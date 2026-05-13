@@ -729,6 +729,10 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     const label fieldI
 )
 {
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+    
     // Rotate the turbine if time value has changed
     if (time_.value() != lastRotationTime_)
     {
@@ -757,7 +761,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addSup(eqn, fieldI);
+        blades_[i].addForce(eqn, UInterp, fieldI);
         forceField_ += blades_[i].forceField();
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
@@ -767,7 +771,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasHub_)
     {
         // Add source for hub actuator line
-        hub_->addSup(eqn, fieldI);
+        hub_->addForce(eqn, UInterp, fieldI);
         forceField_ += hub_->forceField();
         force_ += hub_->force();
         moment += hub_->moment(origin_);
@@ -776,7 +780,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->addSup(eqn, fieldI);
+        tower_->addForce(eqn, UInterp, fieldI);
         forceField_ += tower_->forceField();
         if (includeTowerDrag_)
         {
@@ -787,7 +791,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->addSup(eqn, fieldI);
+        nacelle_->addForce(eqn, UInterp, fieldI);
         forceField_ += nacelle_->forceField();
         if (includeNacelleDrag_)
         {
@@ -823,6 +827,10 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     const label fieldI
 )
 {
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+    
     // Rotate the turbine if time value has changed
     if (time_.value() != lastRotationTime_)
     {
@@ -851,7 +859,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addSup(rho, eqn, fieldI);
+        blades_[i].addForce(rho, eqn, UInterp, fieldI);
         forceField_ += blades_[i].forceField();
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
@@ -861,7 +869,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasHub_)
     {
         // Add source for hub actuator line
-        hub_->addSup(rho, eqn, fieldI);
+        hub_->addForce(rho, eqn, UInterp, fieldI);
         forceField_ += hub_->forceField();
         force_ += hub_->force();
         moment += hub_->moment(origin_);
@@ -870,7 +878,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->addSup(rho, eqn, fieldI);
+        tower_->addForce(rho, eqn, UInterp, fieldI);
         forceField_ += tower_->forceField();
         if (includeTowerDrag_)
         {
@@ -881,7 +889,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->addSup(rho, eqn, fieldI);
+        nacelle_->addForce(rho, eqn, UInterp, fieldI);
         forceField_ += nacelle_->forceField();
         if (includeNacelleDrag_)
         {

@@ -576,6 +576,10 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     const label fieldI
 )
 {
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+
     // Rotate the turbine if time value has changed
     if (time_.value() != lastRotationTime_)
     {
@@ -598,7 +602,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addSup(eqn, fieldI);
+        blades_[i].addForce(eqn, UInterp, fieldI);
         forceField_ += blades_[i].forceField();
         Info<< "Added blade" << endl;
         force_ += blades_[i].force();
@@ -611,7 +615,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
         // Add source for strut actuator lines
         forAll(struts_, i)
         {
-            struts_[i].addSup(eqn, fieldI);
+            struts_[i].addForce(eqn, UInterp, fieldI);
             forceField_ += struts_[i].forceField();
             force_ += struts_[i].force();
             moment += struts_[i].moment(origin_);
@@ -621,7 +625,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     if (hasShaft_)
     {
         // Add source for shaft actuator line
-        shaft_->addSup(eqn, fieldI);
+        shaft_->addForce(eqn, UInterp, fieldI);
         forceField_ += shaft_->forceField();
         force_ += shaft_->force();
         moment += shaft_->moment(origin_);
@@ -655,6 +659,10 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     const label fieldI
 )
 {
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+
     // Rotate the turbine if time value has changed
     if (time_.value() != lastRotationTime_)
     {
@@ -677,7 +685,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addSup(rho, eqn, fieldI);
+        blades_[i].addForce(rho, eqn, UInterp, fieldI);
         forceField_ += blades_[i].forceField();
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
@@ -689,7 +697,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
         // Add source for strut actuator lines
         forAll(struts_, i)
         {
-            struts_[i].addSup(rho, eqn, fieldI);
+            struts_[i].addForce(rho, eqn, UInterp, fieldI);
             forceField_ += struts_[i].forceField();
             force_ += struts_[i].force();
             moment += struts_[i].moment(origin_);
@@ -699,7 +707,7 @@ void Foam::fv::crossFlowTurbineALSource::addSup
     if (hasShaft_)
     {
         // Add source for shaft actuator line
-        shaft_->addSup(rho, eqn, fieldI);
+        shaft_->addForce(rho, eqn, UInterp, fieldI);
         forceField_ += shaft_->forceField();
         force_ += shaft_->force();
         moment += shaft_->moment(origin_);

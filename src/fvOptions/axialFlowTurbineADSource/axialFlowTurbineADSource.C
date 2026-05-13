@@ -172,6 +172,10 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     const label fieldI
 )
 {
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+
     Info << "Before first use" << endl;
     if (firstUse_)
     {
@@ -186,14 +190,14 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     {
         // Add source for tower actuator line
         tower_->setAzimuthIndex(0);
-        tower_->addSup(eqn, fieldI);
+        tower_->addForce(eqn, UInterp, fieldI);
     }
 
     if (hasNacelle_)
     {
         // Add source for tower actuator line
         nacelle_->setAzimuthIndex(0);
-        nacelle_->addSup(eqn, fieldI);
+        nacelle_->addForce(eqn, UInterp, fieldI);
     }
     // code can run extra revolutions to make dynamic stall converge
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
@@ -226,7 +230,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addSup(eqn, fieldI);
+                blades_[i].addForce(eqn, UInterp, fieldI);
                 forceField_ +=
                     (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
@@ -239,7 +243,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for hub actuator line
                 hub_->setAzimuthIndex(innerStep);
-                hub_->addSup(eqn, fieldI);
+                hub_->addForce(eqn, UInterp, fieldI);
                 forceField_ += (1.0/divisions_)*hub_->forceField();
                 force_ += hub_->force();
                 moment += hub_->moment(origin_);
@@ -309,6 +313,10 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     const label fieldI
 )
 {
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+
     if (firstUse_)
     {
         buildInfluenceCells();
@@ -345,7 +353,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addSup(rho, eqn, fieldI);
+                blades_[i].addForce(rho, eqn, UInterp, fieldI);
                 forceField_ +=
                     (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 force_ += bladeMultiplier_*blades_[i].force();
@@ -357,7 +365,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for hub actuator line
                 hub_->setAzimuthIndex(innerStep);
-                hub_->addSup(rho, eqn, fieldI);
+                hub_->addForce(rho, eqn, UInterp, fieldI);
                 forceField_ += (1.0/divisions_)*hub_->forceField();
                 force_ += hub_->force();
                 moment += hub_->moment(origin_);
@@ -367,7 +375,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for tower actuator line
                 tower_->setAzimuthIndex(innerStep);
-                tower_->addSup(rho, eqn, fieldI);
+                tower_->addForce(rho, eqn, UInterp, fieldI);
                 forceField_ += (1.0/divisions_)*tower_->forceField();
                 if (includeTowerDrag_)
                 {
@@ -379,7 +387,7 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             {
                 // Add source for tower actuator line
                 nacelle_->setAzimuthIndex(innerStep);
-                nacelle_->addSup(rho, eqn, fieldI);
+                nacelle_->addForce(rho, eqn, UInterp, fieldI);
                 forceField_ += (1.0/divisions_)*nacelle_->forceField();
                 if (includeNacelleDrag_)
                 {

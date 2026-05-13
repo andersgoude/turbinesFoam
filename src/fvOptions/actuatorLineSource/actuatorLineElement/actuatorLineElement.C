@@ -162,25 +162,69 @@ Foam::label Foam::fv::actuatorLineElement::findCell
     const point& location
 )
 {
-    if (Pstream::parRun())
+    label localCell = -1;
+
+    // Fast path:
+    // Previous owner checks cached cell + neighbors
+    if
+    (
+        previousProcI_ == Pstream::myProcNo()
+            && previousCellI_ >= 0
+            && previousCellI_ < mesh_.nCells()
+    )
     {
-        bool mayContain = meshBoundBox_.containsInside(location);
-
-        // Make decision global
-        reduce(mayContain, orOp<bool>());
-
-        if (mayContain == false)
+        // Check cached cell
+        if (mesh_.pointInCell(location, previousCellI_))
         {
-            return -1;   // no rank will call findCell()
+            localCell = previousCellI_;
         }
+        else
+        {
+            // If not previous cell, check neighboring cells
+            const labelList& nbrs =
+                mesh_.cellCells()[previousCellI_];
 
-        // Now ALL ranks call it
-        return mesh_.findCell(location);
+            forAll(nbrs, nbrI)
+            {
+                label testCell = nbrs[nbrI];
+
+                if (mesh_.pointInCell(location, testCell))
+                {
+                    localCell = testCell;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Fallback: expensive global/local search
+    if (localCell == -1)
+    {
+        if (meshBoundBox_.containsInside(location))
+        {
+            localCell = mesh_.findCell(location);
+        }
+    }
+
+    // Determine owning processor
+    label ownerProc = (localCell >= 0)
+      ? Pstream::myProcNo() : -1;
+
+    reduce(ownerProc, maxOp<label>());
+
+    // Update cache
+    if (localCell >= 0)
+    {
+        previousCellI_ = localCell;
+        previousProcI_ = Pstream::myProcNo();
     }
     else
     {
-        return mesh_.findCell(location);;
+        previousCellI_ = -1;
+        previousProcI_ = -1;
     }
+
+    return localCell;
 }
 
 
@@ -353,7 +397,7 @@ void Foam::fv::actuatorLineElement::applyForceField
             scalar dis = magSqr(C[cellI] - position_);
             if (dis <= sphereRadiusSqr)
             {
-                scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
+                scalar factor = 1*Foam::exp(-dis*invepsilonSqr)*internalFactor;
                 // forceField is opposite forceVector
                 forceField[cellI] += -forceVector_*factor;
             }
@@ -368,7 +412,7 @@ void Foam::fv::actuatorLineElement::applyForceField
             scalar dis = magSqr(C[cellI] - position_);
             if (dis <= sphereRadiusSqr)
             {
-                scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
+                scalar factor = 1*Foam::exp(-dis*invepsilonSqr)*internalFactor;
                 // forceField is opposite forceVector
                 forceField[cellI] += -forceVector_*factor;
             }
@@ -431,13 +475,14 @@ void Foam::fv::actuatorLineElement::setAzimuthIndex
 
 void Foam::fv::actuatorLineElement::calculateInflowVelocity
 (
-    const volVectorField& Uin
+    const interpolationCellPoint<vector>& UInterp
 )
 {
     // Find local flow velocity by interpolating to element location
-    inflowVelocity_ = vector(VGREAT, VGREAT, VGREAT);
     vector inflowVelocityPoint = position_;
-    interpolationCellPoint<vector> UInterp(Uin);
+    
+    vector localVelocitySum = vector::zero;
+    label localNSamples = 0;
     
     // If the flow only is sampled in the center
     if (velocitySampleRadius_ <= 0.0)
@@ -445,15 +490,13 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity
         label inflowCellI = findCell(inflowVelocityPoint);
         if (inflowCellI >= 0)
         {
-            inflowVelocity_ = UInterp.interpolate
+            localVelocitySum = UInterp.interpolate
             (
                 inflowVelocityPoint,
                 inflowCellI
             );
+            localNSamples = 1;
         }
-
-        // Reduce inflow velocity over all processors
-        reduce(inflowVelocity_, minOp<vector>());
     }
     // If the flow is sampled by using a circle around position_
     else
@@ -465,11 +508,8 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity
         vector chordNormal = chordDirection_ / mag(chordDirection_);
         
         // Calculate mean value over all circle points
-        vector velocitySum = vector(0.0, 0.0, 0.0);
         for (label point = 0; point < nVelocitySamples_; point++)
         {
-            vector sampleVelocity = vector(VGREAT, VGREAT, VGREAT);
-
             // distribute the points evenly in terms of angular distance
             scalar pointAngle = Foam::constant::mathematical::pi * 2.0 * point/
                                 nVelocitySamples_;
@@ -483,35 +523,25 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity
             label sampleCellI = findCell(samplePoint);
             if (sampleCellI >= 0)
             {
-                sampleVelocity = UInterp.interpolate
+                localVelocitySum += UInterp.interpolate
                 (
                     samplePoint,
                     sampleCellI
                 );
+                localNSamples++;
             }
-
-            // Reduce inflow velocity over all processors
-            reduce(sampleVelocity, minOp<vector>());
-
-            // If inflow velocity is not detected, position is not in the mesh
-            if (not (sampleVelocity[0] < VGREAT))
-            {
-                // Raise fatal error since inflow velocity cannot be detected
-                FatalErrorIn("void actuatorLineElement::calculateForce()")
-                    << "Inflow velocity point for " << name_
-                    << " not found in mesh"
-                    << abort(FatalError);
-            }
-
-            velocitySum = velocitySum + sampleVelocity;
         }
-
-        // Set inflow Velocity as the mean value
-        inflowVelocity_ = 1.0 / nVelocitySamples_ * velocitySum;
     }
+    
+    // Reduce inflow velocity over all processors
+    reduce(localVelocitySum, sumOp<vector>());
+    reduce(localNSamples, sumOp<label>());
+
+    // Set inflow Velocity as the mean value
+    inflowVelocity_ = 1.0 / localNSamples * localVelocitySum;
 
     // If inflow velocity is not detected, position is not in the mesh
-    if (not (inflowVelocity_[0] < VGREAT))
+    if (localNSamples == 0)
     {
         // Raise fatal error since inflow velocity cannot be detected
         FatalErrorIn("void actuatorLineElement::calculateForce()")
@@ -584,6 +614,8 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     planformNormal_(vector::zero),
     velocity_(vector::zero),
     forceVector_(vector::zero),
+    previousCellI_(-1),
+    previousProcI_(-1),
     relativeVelocity_(vector::zero),
     relativeVelocityGeom_(vector::zero),
     angleOfAttack_(0.0),
@@ -603,9 +635,9 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     writePerf_(false),
     rootDistance_(0.0),
     endEffectFactor_(1.0),
-    azimuthIndex_(0),
     addedMassActive_(dict.lookupOrDefault("addedMass", false)),
-    addedMass_(mesh.time(), dict.lookupOrDefault("chordLength", 1.0), debug)
+    addedMass_(mesh.time(), dict.lookupOrDefault("chordLength", 1.0), debug),
+    azimuthIndex_(0)
 {
     meshBoundBox_.inflate(1e-6);
     read();
@@ -613,6 +645,7 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     {
         createOutputFile();
     }
+    mesh_.cellCells();
 }
 
 // * * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * //
@@ -751,7 +784,7 @@ const Foam::scalar& Foam::fv::actuatorLineElement::rootDistance()
 
 void Foam::fv::actuatorLineElement::calculateForce
 (
-    const volVectorField& Uin
+    const interpolationCellPoint<vector>& UInterp
 )
 {
     scalar pi = Foam::constant::mathematical::pi;
@@ -772,7 +805,8 @@ void Foam::fv::actuatorLineElement::calculateForce
     }
 
     // Find local flow velocity by interpolating to element location
-    calculateInflowVelocity(Uin);
+    calculateInflowVelocity(UInterp);
+    
 
     // Subtract spanwise component of inflow velocity
     vector spanwiseVelocity = spanDirection_
@@ -808,6 +842,9 @@ void Foam::fv::actuatorLineElement::calculateForce
     angleOfAttack_ = radToDeg(angleOfAttackRad);
 
     // Update Reynolds number of profile data
+    
+    //calculateInflowVelocity(UInterp); // Is this result ever used?
+
     profileData_.updateRe(Re_);
 
     // Lookup lift and drag coefficients
@@ -1073,9 +1110,9 @@ Foam::vector Foam::fv::actuatorLineElement::moment(vector point)
 }
 
 
-void Foam::fv::actuatorLineElement::addSup
+void Foam::fv::actuatorLineElement::addForce
 (
-    fvMatrix<vector>& eqn,
+    const interpolationCellPoint<vector>& UInterp,
     volVectorField& forceField
 )
 {
@@ -1096,8 +1133,10 @@ void Foam::fv::actuatorLineElement::addSup
         )
     );*/
 
-    const volVectorField& Uin(eqn.psi());
-    calculateForce(Uin);
+    //const volVectorField& Uin(eqn.psi());
+    
+    
+    calculateForce(UInterp);
     applyForceField(forceField);
 
     // Add force to total actuator line force
@@ -1111,10 +1150,10 @@ void Foam::fv::actuatorLineElement::addSup
 }
 
 
-void Foam::fv::actuatorLineElement::addSup
+void Foam::fv::actuatorLineElement::addForce
 (
     const volScalarField& rho,
-    fvMatrix<vector>& eqn,
+    const interpolationCellPoint<vector>& UInterp,
     volVectorField& forceField
 )
 {
@@ -1135,9 +1174,12 @@ void Foam::fv::actuatorLineElement::addSup
         )
     );*/
 
-    const volVectorField& Uin(eqn.psi());
-    calculateForce(Uin);
-    applyForceField(forceField);
+    //const volVectorField& Uin(eqn.psi());
+    calculateForce(UInterp);
+    for (int li = 0; li < 1; li++)
+    {
+        applyForceField(forceField);
+    }
 
     // Multiply force vector by local density
     multiplyForceRho(rho);

@@ -726,9 +726,10 @@ Foam::vector Foam::fv::actuatorLineSource::moment(vector point)
 }
 
 
-void Foam::fv::actuatorLineSource::addSup
+void Foam::fv::actuatorLineSource::addForce
 (
     fvMatrix<vector>& eqn,
+    interpolationCellPoint<vector>& UInterp,
     const label fieldI
 )
 {
@@ -748,7 +749,7 @@ void Foam::fv::actuatorLineSource::addSup
 
     forAll(elements_, i)
     {
-        elements_[i].addSup(eqn, forceField_);
+        elements_[i].addForce(UInterp, forceField_);
         force_ += elements_[i].force();
     }
 
@@ -774,6 +775,18 @@ void Foam::fv::actuatorLineSource::addSup
     }
 }
 
+void Foam::fv::actuatorLineSource::addSup
+(
+    fvMatrix<vector>& eqn,
+    const label fieldI
+)
+{
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+    addForce(eqn, UInterp, fieldI);
+}
+
 
 void Foam::fv::actuatorLineSource::addSup
 (
@@ -788,22 +801,24 @@ void Foam::fv::actuatorLineSource::addSup
     }
 
     const volVectorField& U = mesh_.lookupObject<volVectorField>("U");
+    interpolationCellPoint<vector> UInterp(U);
 
     word fieldName = fieldNames_[fieldI];
 
     Info<< endl << "Adding " << fieldName << " from " << name_ << endl << endl;
     forAll(elements_, i)
     {
-        elements_[i].calculateForce(U);
+        elements_[i].calculateForce(UInterp);
         elements_[i].addTurbulence(eqn, fieldName);
     }
 }
 
 
-void Foam::fv::actuatorLineSource::addSup
+void Foam::fv::actuatorLineSource::addForce
 (
     const volScalarField& rho,
     fvMatrix<vector>& eqn,
+    interpolationCellPoint<vector>& UInterp,
     const label fieldI
 )
 {
@@ -823,7 +838,7 @@ void Foam::fv::actuatorLineSource::addSup
 
     forAll(elements_, i)
     {
-        elements_[i].addSup(rho, eqn, forceField_);
+        elements_[i].addForce(rho, UInterp, forceField_);
         force_ += elements_[i].force();
     }
     
@@ -849,6 +864,20 @@ void Foam::fv::actuatorLineSource::addSup
     {
         writePerf();
     }
+}
+
+
+void Foam::fv::actuatorLineSource::addSup
+(
+    const volScalarField& rho,
+    fvMatrix<vector>& eqn,
+    const label fieldI
+)
+{
+    // Generate UInterp object to be used for all velocity interpolations
+    const volVectorField& Uin(eqn.psi());
+    interpolationCellPoint<vector> UInterp(Uin);
+    addForce(rho, eqn, UInterp, fieldI);
 }
 
 
