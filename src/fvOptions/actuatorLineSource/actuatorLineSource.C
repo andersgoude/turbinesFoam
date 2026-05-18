@@ -183,7 +183,7 @@ void Foam::fv::actuatorLineSource::createElements()
         // Read pitch
         pitches[i] = elementGeometry_[i][5][0];
         // coneAngle of 90 degrees means a horizontal axis turbine here
-        coneAngles[i] = 
+        coneAngles[i] =
             elementGeometry_[i].size() > 6 ? elementGeometry_[i][6][0] :
             Foam::constant::mathematical::pi/2;
     }
