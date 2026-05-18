@@ -53,12 +53,38 @@ namespace fv
 
 void Foam::fv::crossFlowTurbineALSource::createCoordinateSystem()
 {
-    // Construct the local rotor coordinate system
-    freeStreamDirection_ = freeStreamVelocity_/mag(freeStreamVelocity_);
-    radialDirection_ = axis_^freeStreamDirection_;
-    radialDirection_ = radialDirection_/mag(radialDirection_);
-    // Make sure axis is a unit vector
-    axis_ /= mag(axis_);
+    // Ensure axis_ is a unit vector safely
+    axis_ /= (mag(axis_) + SMALL);
+
+    // Ensure freeStreamDirection_ is a unit vector safely
+    freeStreamDirection_ = freeStreamVelocity_ /
+                             (mag(freeStreamVelocity_) + SMALL);
+
+    // Compute the standard radial direction
+    vector rawRadial = axis_ ^ freeStreamDirection_;
+    scalar magRaw = mag(rawRadial);
+
+    // Handle the collinear limit continuously
+    if (magRaw < 1e-6) 
+    {
+        // Default reference vector
+        vector genericAxis(1, 0, 0);
+
+        // If axis_ aligns with X,
+        // use Z to force the cross product into the Y plane
+        if (mag(axis_.x()) > 0.9)
+        {
+            genericAxis = vector(0, 0, -1); 
+        }
+
+        // Project and compute orthogonal vector
+        vector perpProjected = genericAxis - (genericAxis & axis_)*axis_;
+        rawRadial = axis_ ^ perpProjected;
+        magRaw = mag(rawRadial);
+    }
+
+    // Final normalization
+    radialDirection_ = rawRadial / (magRaw + SMALL);
 }
 
 
@@ -144,10 +170,13 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             point -= chordDisplacement*freeStreamDirection_;
             // Move along radial direction
             point += radius*radialDirection_;
+            // Set chordDirection
+            vector chordDirection = axis_ ^ radialDirection_;
+            chordDirection /= (mag(chordDirection) + SMALL);
             // Set initial velocity of quarter chord
             scalar radiusCorr = sqrt(magSqr((chordMount - 0.25)*chordLength)
                                      + magSqr(radius));
-            vector initialVelocity = -freeStreamDirection_*omega_*radiusCorr;
+            vector initialVelocity = chordDirection*omega_*radiusCorr;
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
@@ -181,7 +210,6 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             elementGeometry[j][2][0] = chordLength;
 
             // Set chord reference direction
-            vector chordDirection = -freeStreamDirection_;
             rotateVector(chordDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][3][0] = chordDirection.x();
             elementGeometry[j][3][1] = chordDirection.y();
@@ -338,10 +366,13 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             point -= chordDisplacement*freeStreamDirection_;
             // Move along radial direction
             point += radius*radialDirection_;
+            // Set chordDirection
+            vector chordDirection = axis_ ^ radialDirection_;
+            chordDirection /= (mag(chordDirection) + SMALL);
             // Set initial velocity of quarter chord
             scalar radiusCorr = sqrt(magSqr((chordMount - 0.25)*chordLength)
                                      + magSqr(radius));
-            vector initialVelocity = -freeStreamDirection_*omega_*radiusCorr;
+            vector initialVelocity = chordDirection*omega_*radiusCorr;
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
@@ -374,7 +405,6 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             elementGeometry[j][2][0] = chordLength;
 
             // Set chord reference direction
-            vector chordDirection = -freeStreamDirection_;
             rotateVector(chordDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][3][0] = chordDirection.x();
             elementGeometry[j][3][1] = chordDirection.y();
