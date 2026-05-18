@@ -791,7 +791,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->addForce(eqn, UInterp, forceField_, fieldI,1.0);
+        nacelle_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
         //forceField_ += nacelle_->forceField();
         if (includeNacelleDrag_)
         {

@@ -208,7 +208,14 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addForce(eqn, UInterp, forceField_, fieldI, bladeMultiplier_/divisions_);
+                blades_[i].addForce
+                (
+                    eqn,
+                    UInterp,
+                    forceField_,
+                    fieldI,
+                    bladeMultiplier_/divisions_
+                );
                 //forceField_ +=
                 //    (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 //Info<< "Added blade" << endl;
@@ -223,7 +230,14 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 forAll(struts_, i)
                 {
                     struts_[i].setAzimuthIndex(innerStep);
-                    struts_[i].addForce(eqn, UInterp, forceField_, fieldI, bladeMultiplier_/divisions_);
+                    struts_[i].addForce
+                    (
+                        eqn,
+                        UInterp,
+                        forceField_,
+                        fieldI,
+                        bladeMultiplier_/divisions_
+                    );
                     //forceField_ +=
                     //    (bladeMultiplier_/divisions_)*struts_[i].forceField();
                     force_ += bladeMultiplier_*struts_[i].force();
@@ -235,7 +249,14 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             {
                 // Add source for shaft actuator line
                 shaft_->setAzimuthIndex(innerStep);
-                shaft_->addForce(eqn, UInterp, forceField_, fieldI, 1.0/divisions_);
+                shaft_->addForce
+                (
+                    eqn,
+                    UInterp,
+                    forceField_,
+                    fieldI,
+                    1.0/divisions_
+                );
                 //forceField_ += (1.0/divisions_)*shaft_->forceField();
                 force_ += shaft_->force();
                 moment += shaft_->moment(origin_);
@@ -318,7 +339,15 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             forAll(blades_, i)
             {
                 blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addForce(rho, eqn, UInterp, forceField_, fieldI, bladeMultiplier_/divisions_);
+                blades_[i].addForce
+                (
+                    rho,
+                    eqn,
+                    UInterp,
+                    forceField_,
+                    fieldI,
+                    bladeMultiplier_/divisions_
+                );
                 //forceField_ +=
                 //    (bladeMultiplier_/divisions_)*blades_[i].forceField();
                 force_ += bladeMultiplier_*blades_[i].force();
@@ -332,9 +361,17 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 forAll(struts_, i)
                 {
                     struts_[i].setAzimuthIndex(innerStep);
-                    struts_[i].addForce(rho, eqn, UInterp, forceField_, fieldI, bladeMultiplier_/divisions_);
+                    struts_[i].addForce
+                    (
+                        rho,
+                        eqn,
+                        UInterp,
+                        forceField_,
+                        fieldI,
+                        bladeMultiplier_/divisions_
+                    );
                     //forceField_ +=
-                    //    (bladeMultiplier_/divisions_)*struts_[i].forceField();
+                    //  (bladeMultiplier_/divisions_)*struts_[i].forceField();
                     force_ += bladeMultiplier_*struts_[i].force();
                     moment += bladeMultiplier_*struts_[i].moment(origin_);
                 }
@@ -344,7 +381,15 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             {
                 // Add source for shaft actuator line
                 shaft_->setAzimuthIndex(innerStep);
-                shaft_->addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0/divisions_);
+                shaft_->addForce
+                (
+                    rho,
+                    eqn,
+                    UInterp,
+                    forceField_,
+                    fieldI,
+                    1.0/divisions_
+                );
                 //forceField_ += (1.0/divisions_)*shaft_->forceField();
                 force_ += shaft_->force();
                 moment += shaft_->moment(origin_);
@@ -406,7 +451,8 @@ void Foam::fv::crossFlowTurbineADSource::addSup
         fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
         kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         fvMatrix<scalar> kFieldShaft(eqn.psi(), eqn.dimensions());
-        kFieldShaft *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        kFieldShaft *=
+            dimensionedScalar("zero", forceField_.dimensions(), 0.0);
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Add scalar source term from blades
