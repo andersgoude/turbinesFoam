@@ -65,7 +65,7 @@ void Foam::fv::crossFlowTurbineALSource::createCoordinateSystem()
     scalar magRaw = mag(rawRadial);
 
     // Handle the collinear limit continuously
-    if (magRaw < 1e-6) 
+    if (magRaw < 1e-6)
     {
         // Default reference vector
         vector genericAxis(1, 0, 0);
@@ -74,7 +74,7 @@ void Foam::fv::crossFlowTurbineALSource::createCoordinateSystem()
         // use Z to force the cross product into the Y plane
         if (mag(axis_.x()) > 0.9)
         {
-            genericAxis = vector(0, 0, -1); 
+            genericAxis = vector(0, 0, -1);
         }
 
         // Project and compute orthogonal vector
