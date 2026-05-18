@@ -53,12 +53,38 @@ namespace fv
 
 void Foam::fv::crossFlowTurbineALSource::createCoordinateSystem()
 {
-    // Construct the local rotor coordinate system
-    freeStreamDirection_ = freeStreamVelocity_/mag(freeStreamVelocity_);
-    radialDirection_ = axis_^freeStreamDirection_;
-    radialDirection_ = radialDirection_/mag(radialDirection_);
-    // Make sure axis is a unit vector
-    axis_ /= mag(axis_);
+    // Ensure axis_ is a unit vector safely
+    axis_ /= (mag(axis_) + SMALL);
+
+    // Ensure freeStreamDirection_ is a unit vector safely
+    freeStreamDirection_ = freeStreamVelocity_ /
+                             (mag(freeStreamVelocity_) + SMALL);
+
+    // Compute the standard radial direction
+    vector rawRadial = axis_ ^ freeStreamDirection_;
+    scalar magRaw = mag(rawRadial);
+
+    // Handle the collinear limit continuously
+    if (magRaw < 1e-6)
+    {
+        // Default reference vector
+        vector genericAxis(1, 0, 0);
+
+        // If axis_ aligns with X,
+        // use Z to force the cross product into the Y plane
+        if (mag(axis_.x()) > 0.9)
+        {
+            genericAxis = vector(0, 0, -1);
+        }
+
+        // Project and compute orthogonal vector
+        vector perpProjected = genericAxis - (genericAxis & axis_)*axis_;
+        rawRadial = axis_ ^ perpProjected;
+        magRaw = mag(rawRadial);
+    }
+
+    // Final normalization
+    radialDirection_ = rawRadial / (magRaw + SMALL);
 }
 
 
@@ -114,9 +140,8 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             scalar chordMount = elementData[j][4];
             scalar pitch = elementData[j][5];
             // Read cone angle (from rotation axis) in degrees if present
-            scalar cone = (
-                elementData.size() > j && elementData[j].size() > 6
-            ) ? elementData[j][6] : 0.0;
+            // or calculate it from the element data
+            scalar cone = calculateCone(elementData, j);
 
             // Compute frontal area contribution from this geometry segment
             if (j > 0)
@@ -127,13 +152,14 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             }
 
             // Set sizes for actuatorLineSource elementGeometry lists
-            elementGeometry[j].setSize(6);
+            elementGeometry[j].setSize(7);
             elementGeometry[j][0].setSize(3);
             elementGeometry[j][1].setSize(3);
             elementGeometry[j][2].setSize(1);
             elementGeometry[j][3].setSize(3);
             elementGeometry[j][4].setSize(1);
             elementGeometry[j][5].setSize(1);
+            elementGeometry[j][6].setSize(1);
 
             // Create geometry point for AL source at origin
             vector point = origin_;
@@ -144,10 +170,13 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             point -= chordDisplacement*freeStreamDirection_;
             // Move along radial direction
             point += radius*radialDirection_;
+            // Set chordDirection
+            vector chordDirection = axis_ ^ radialDirection_;
+            chordDirection /= (mag(chordDirection) + SMALL);
             // Set initial velocity of quarter chord
             scalar radiusCorr = sqrt(magSqr((chordMount - 0.25)*chordLength)
                                      + magSqr(radius));
-            vector initialVelocity = -freeStreamDirection_*omega_*radiusCorr;
+            vector initialVelocity = chordDirection*omega_*radiusCorr;
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
@@ -169,8 +198,8 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             // Set span directions for AL source
             // Initialize span direction and take into account cone angle
             vector spanDir = (
-                cos(degToRad(cone))*axis_
-                + sin(degToRad(cone))*radialDirection_
+                cos(cone)*axis_
+                + sin(cone)*radialDirection_
             );
             rotateVector(spanDir, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDir.x(); // x component of span dir
@@ -181,7 +210,6 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             elementGeometry[j][2][0] = chordLength;
 
             // Set chord reference direction
-            vector chordDirection = -freeStreamDirection_;
             rotateVector(chordDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][3][0] = chordDirection.x();
             elementGeometry[j][3][1] = chordDirection.y();
@@ -192,6 +220,9 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
 
             // Set pitch
             elementGeometry[j][5][0] = pitch;
+            
+            // Set cone
+            elementGeometry[j][6][0] = cone;
         }
 
         // Add frontal area to list
@@ -312,14 +343,19 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             scalar chordMount = elementData[j][4];
             scalar pitch = elementData[j][5];
 
+            // Read cone angle (from rotation axis) in degrees if present
+            // or calculate it from the element data
+            scalar cone = calculateCone(elementData, j);
+
             // Set sizes for actuatorLineSource elementGeometry lists
-            elementGeometry[j].setSize(6);
+            elementGeometry[j].setSize(7);
             elementGeometry[j][0].setSize(3);
             elementGeometry[j][1].setSize(3);
             elementGeometry[j][2].setSize(1);
             elementGeometry[j][3].setSize(3);
             elementGeometry[j][4].setSize(1);
             elementGeometry[j][5].setSize(1);
+            elementGeometry[j][6].setSize(1);
 
             // Create geometry point for AL source at origin
             vector point = origin_;
@@ -330,10 +366,13 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             point -= chordDisplacement*freeStreamDirection_;
             // Move along radial direction
             point += radius*radialDirection_;
+            // Set chordDirection
+            vector chordDirection = axis_ ^ radialDirection_;
+            chordDirection /= (mag(chordDirection) + SMALL);
             // Set initial velocity of quarter chord
             scalar radiusCorr = sqrt(magSqr((chordMount - 0.25)*chordLength)
                                      + magSqr(radius));
-            vector initialVelocity = -freeStreamDirection_*omega_*radiusCorr;
+            vector initialVelocity = chordDirection*omega_*radiusCorr;
             scalar velAngle = atan2(((chordMount - 0.25)*chordLength), radius);
             rotateVector(initialVelocity, vector::zero, axis_, velAngle);
             initialVelocities[j] = initialVelocity;
@@ -353,7 +392,10 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             elementGeometry[j][0][2] = point.z(); // z location of geom point
 
             // Set span directions for AL source (in radial direction)
-            vector spanDirection = radialDirection_;
+            vector spanDirection = (
+                cos(cone)*axis_
+                + sin(cone)*radialDirection_
+            );
             rotateVector(spanDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDirection.x();
             elementGeometry[j][1][1] = spanDirection.y();
@@ -363,7 +405,6 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
             elementGeometry[j][2][0] = chordLength;
 
             // Set chord reference direction
-            vector chordDirection = -freeStreamDirection_;
             rotateVector(chordDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][3][0] = chordDirection.x();
             elementGeometry[j][3][1] = chordDirection.y();
@@ -374,6 +415,9 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
 
             // Set pitch
             elementGeometry[j][5][0] = pitch;
+            
+            // Set pitch
+            elementGeometry[j][6][0] = cone;
         }
 
         if (debug)

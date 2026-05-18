@@ -94,6 +94,61 @@ void Foam::fv::turbineALSource::rotateVector
 }
 
 
+scalar Foam::fv::turbineALSource::calculateCone
+(
+    const List<List<scalar>>& elementData,
+    const label j
+)
+{
+    // Use provided cone value if available
+    if (elementData[j].size() > 6)
+    {
+        return degToRad(elementData[j][6]);
+    }
+
+    scalar dr;
+    scalar dx;
+
+    // Forward difference at first point
+    if (j == 0)
+    {
+        dr = elementData[j+1][1] - elementData[j][1];
+        dx = elementData[j+1][0] - elementData[j][0];
+    }
+    // Backward difference at last point
+    else if (j == elementData.size() - 1)
+    {
+        dr = elementData[j][1] - elementData[j-1][1];
+        dx = elementData[j][0] - elementData[j-1][0];
+    }
+    // Central difference for interior points
+    else
+    {
+        dr = elementData[j+1][1] - elementData[j-1][1];
+        dx = elementData[j+1][0] - elementData[j-1][0];
+    }
+
+    // Protect against division by zero
+    if (Foam::mag(dx) < SMALL)
+    {
+        if (dr > 0)
+        {
+            return constant::mathematical::pi/2.0;
+        }
+        else if (dr < 0)
+        {
+            return -constant::mathematical::pi/2.0;
+        }
+        else
+        {
+            return 0.0;
+        }
+    }
+
+    return Foam::atan(dr/dx);
+}
+
+
 void Foam::fv::turbineALSource::createCoordinateSystem()
 {
     // Should be unique for each type of turbine
