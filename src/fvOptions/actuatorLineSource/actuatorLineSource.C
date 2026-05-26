@@ -343,6 +343,12 @@ void Foam::fv::actuatorLineSource::createElements()
             dsDict.add("chordLength", chordLength);
             dict.add("dynamicStall", dsDict);
         }
+        if (coeffs_.found("meshFactor"))
+        {
+            scalar meshFactor = 2.0;
+            coeffs_.lookup("meshFactor") >> meshFactor;
+            dict.add("meshFactor", meshFactor);
+        }
         dictionary fcDict = coeffs_.subOrEmptyDict("flowCurvature");
         dict.add("flowCurvature", fcDict);
         bool writeElementPerf

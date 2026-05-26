@@ -716,7 +716,7 @@ bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
         // Get compact field
         compactField_ = coeffs_.lookupOrDefault("compactField", true);
 
-        // Get compact field
+        // Get cache interactions field
         cacheInteractions_ = coeffs_.lookupOrDefault("cacheInteractions", true);
 
         // For simplicity, ensure that cacheInteractions cannot be true when
