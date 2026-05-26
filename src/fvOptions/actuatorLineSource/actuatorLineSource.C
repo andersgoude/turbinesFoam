@@ -120,10 +120,13 @@ void Foam::fv::actuatorLineSource::createOutputFile()
         mkDir(dir);
     }
 
-    outputFile_ = new OFstream(dir/name_ + ".csv");
+    outputFile_.open(dir/name_ + ".csv", std::ios::out);
 
-    *outputFile_<< "time,x,y,z,rel_vel_mag,alpha_deg,alpha_geom_deg,cl,cd,cm"
-                << endl;
+    if (outputFile_.is_open())
+    {
+        outputFile_ << "time,x,y,z,rel_vel_mag,alpha_deg,alpha_geom_deg,cl,"
+                    << "cd,cm" << std::endl;
+    }
 }
 
 
@@ -346,7 +349,12 @@ void Foam::fv::actuatorLineSource::createElements()
         (
             coeffs_.lookupOrDefault("writeElementPerf", false)
         );
+        bool writeElementPerfEnd
+        (
+            coeffs_.lookupOrDefault("writeElementPerfEnd", false)
+        );
         dict.add("writePerf", writeElementPerf);
+        dict.add("writePerfEnd", writeElementPerfEnd);
 
         if (debug)
         {
@@ -362,6 +370,7 @@ void Foam::fv::actuatorLineSource::createElements()
             Info<< "Profile name index: " << elementProfileIndex << endl;
             Info<< "Profile name: " << profileName << endl;
             Info<< "writePerf: " << writeElementPerf << endl;
+            Info<< "writePerfEnd: " << writeElementPerfEnd << endl;
             Info<< "Root distance (nondimensional): " << rootDistance << endl;
         }
 
@@ -412,9 +421,17 @@ void Foam::fv::actuatorLineSource::writePerf()
     cl /= totalArea; cd /= totalArea; cm /= totalArea;
 
     // write time,x,y,z,rel_vel_mag,alpha_deg,alpha_geom_deg,cl,cd,cm
-    *outputFile_<< time << "," << x << "," << y << "," << z << "," << relVelMag
-                << "," << alphaDeg << "," << alphaGeom << "," << cl << ","
-                << cd << "," << cm << endl;
+    stringBuffer_ << time << "," << x << "," << y << "," << z << ","
+                << relVelMag << "," << alphaDeg << "," << alphaGeom << ","
+                << cl << "," << cd << "," << cm << std::endl;
+
+    // only write to file with writePerf_, writePerfEnd_ writes in destructor
+    if (writePerf_ && outputFile_.is_open())
+    {
+        outputFile_ << stringBuffer_.str();
+        stringBuffer_.str("");
+        stringBuffer_.clear();
+    }
 }
 
 
@@ -537,13 +554,14 @@ Foam::fv::actuatorLineSource::actuatorLineSource
         )
     ),
     writePerf_(coeffs_.lookupOrDefault("writePerf", false)),
+    writePerfEnd_(coeffs_.lookupOrDefault("writePerfEnd", false)),
     lastMotionTime_(mesh.time().value()),
     endEffectsActive_(false),
     applyForce_(true)
 {
     read(dict_);
     createElements();
-    if (writePerf_)
+    if (writePerf_ || writePerfEnd_)
     {
         createOutputFile();
     }
@@ -556,13 +574,31 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     {
         calcEndEffects();
     }
+    int precision = 6;
+    if (mesh_.time().controlDict().found("writePrecision"))
+    {
+        mesh_.time().controlDict().lookup("writePrecision") >> precision;
+    }
+    stringBuffer_.precision(precision);
 }
 
 
 // * * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * //
 
 Foam::fv::actuatorLineSource::~actuatorLineSource()
-{}
+{
+    if (writePerfEnd_ && writePerf_ == false)
+    {
+        if (outputFile_.is_open())
+        {
+            outputFile_ << stringBuffer_.str();
+        }
+    }
+    if (outputFile_.is_open())
+    {
+       outputFile_.close();
+    }
+}
 
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
@@ -672,23 +708,47 @@ void Foam::fv::actuatorLineSource::setApplyForce(bool active)
 
 void Foam::fv::actuatorLineSource::allocateInfluenceCells
 (
-    label count
+    label count,
+    bool cacheInteractions_
 )
 {
     forAll(elements_, i)
     {
-        elements_[i].allocateInfluenceCells(count);
+        elements_[i].allocateInfluenceCells(count, cacheInteractions_);
     }
 }
 
 void Foam::fv::actuatorLineSource::constructInfluenceCellList
 (
-    label azimuthIndex
+    label azimuthIndex,
+    labelList& globalToLocal,
+    label& nActive
 )
 {
     forAll(elements_, i)
     {
-        elements_[i].constructInfluenceCellList(azimuthIndex);
+        elements_[i].constructInfluenceCellList
+        (
+            azimuthIndex,
+            globalToLocal,
+            nActive
+        );
+    }
+}
+
+void Foam::fv::actuatorLineSource::setCompactFields
+(
+    vectorField& activePositions,
+    vectorField& activeForceField
+)
+{
+    forAll(elements_, i)
+    {
+        elements_[i].setCompactFields
+        (
+            activePositions,
+            activeForceField
+        );
     }
 }
 
@@ -700,6 +760,11 @@ void Foam::fv::actuatorLineSource::setAzimuthIndex
     forAll(elements_, i)
     {
         elements_[i].setAzimuthIndex(azimuthIndex);
+    }
+    if (azimuthIndex == 0)
+    {
+        stringBuffer_.str("");
+        stringBuffer_.clear();
     }
 }
 
@@ -788,11 +853,12 @@ void Foam::fv::actuatorLineSource::addForce
 
 
     // Write performance to file
-    if (writePerf_ and Pstream::master())
+    if (Pstream::master() && (writePerf_ || writePerfEnd_))
     {
         writePerf();
     }
 }
+
 
 void Foam::fv::actuatorLineSource::addSup
 (
@@ -890,7 +956,7 @@ void Foam::fv::actuatorLineSource::addForce
     }
 
     // Write performance to file
-    if (writePerf_ and Pstream::master())
+    if (Pstream::master() && (writePerf_ || writePerfEnd_))
     {
         writePerf();
     }

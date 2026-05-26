@@ -188,18 +188,26 @@ void Foam::fv::crossFlowTurbineADSource::addSup
     {
         // forceField_ should be the average during one revolution here
         //forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0)
-        forceField_.primitiveFieldRef() = vector::zero;
-        forceField_.correctBoundaryConditions();
-        for (int innerStep = 0; innerStep < divisions_; innerStep++)
+        if (activeForceField_.size() > 0)
         {
-            // Zero out force vector and field
-            force_ *= 0;
+            activeForceField_ = vector::zero;
+        }
+        else
+        {
+            // forceField_ should be the average during one revolution here
+            forceField_.primitiveFieldRef() = vector::zero;
+            forceField_.correctBoundaryConditions();
 
             // Check dimensions of force field and correct if necessary
             if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
             {
                 forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
             }
+        }
+        for (int innerStep = 0; innerStep < divisions_; innerStep++)
+        {
+            // Zero out force vector and field
+            force_ *= 0;
 
             // Create local moment vector
             vector moment(vector::zero);
@@ -293,6 +301,16 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             rotateAD();
         }
     }
+
+    // When using compressed fields, restore them to the original forceField
+    if (activeForceField_.size() > 0)
+    {
+        forAll(localToGlobal_, forceIndex)
+        {
+            forceField_[localToGlobal_[forceIndex]] =
+                activeForceField_[forceIndex];
+        }
+    }
     eqn += forceField_;
 }
 
@@ -317,10 +335,22 @@ void Foam::fv::crossFlowTurbineADSource::addSup
     // code can run extra revolutions to make dynamic stall converge
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
-        // forceField_ should be the average during one revolution here
-        //forceField_ *= dimensionedScalar("zero",forceField_.dimensions(),0.0);
-        forceField_.primitiveFieldRef() = vector::zero;
-        forceField_.correctBoundaryConditions();
+        if (activeForceField_.size() > 0)
+        {
+            activeForceField_ = vector::zero;
+        }
+        else
+        {
+            // forceField_ should be the average during one revolution here
+            forceField_.primitiveFieldRef() = vector::zero;
+            forceField_.correctBoundaryConditions();
+
+            // Check dimensions of force field and correct if necessary
+            if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+            {
+                forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+            }
+        }
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Zero out force vector and field
@@ -328,12 +358,6 @@ void Foam::fv::crossFlowTurbineADSource::addSup
 
             // Create local moment vector
             vector moment(vector::zero);
-
-            // Check dimensions of force field and correct if necessary
-            if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-            {
-                forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-            }
 
             // Add source for blade actuator lines
             forAll(blades_, i)
@@ -425,6 +449,17 @@ void Foam::fv::crossFlowTurbineADSource::addSup
             rotateAD();
         }
     }
+
+    // When using compressed fields, restore them to the original forceField
+    if (activeForceField_.size() > 0)
+    {
+        forAll(localToGlobal_, forceIndex)
+        {
+            forceField_[localToGlobal_[forceIndex]] =
+                activeForceField_[forceIndex];
+        }
+    }
+
     // multiply with local density
     forceField_ *= rho;
     
@@ -489,45 +524,112 @@ void Foam::fv::crossFlowTurbineADSource::buildInfluenceCells()
 {
     forAll(blades_, i)
     {
-        blades_[i].allocateInfluenceCells(divisions_);
+        blades_[i].allocateInfluenceCells(divisions_, cacheInteractions_);
     }
 
     if (hasStruts_)
     {
         forAll(struts_, i)
         {
-            struts_[i].allocateInfluenceCells(divisions_);
+            struts_[i].allocateInfluenceCells(divisions_, cacheInteractions_);
         }
     }
 
     if (hasShaft_)
     {
         // Add source for tower actuator line
-        shaft_->allocateInfluenceCells(divisions_);
+        shaft_->allocateInfluenceCells(divisions_, cacheInteractions_);
     }
 
+    //- Allocations are still needed for velocity lookup, but if compactField
+    // is false, we do not need influenceCells
+    if (compactField_ == false)
+    {
+        return;
+    }
+
+    labelList globalToLocal(mesh_.nCells(), -1);
+
+    label nActive = 0;
     for (label innerStep = 0; innerStep < divisions_; innerStep++)
     {
         // Add scalar source term from blades
         forAll(blades_, i)
         {
-            blades_[i].constructInfluenceCellList(innerStep);
+            blades_[i].constructInfluenceCellList
+            (
+                innerStep,
+                globalToLocal,
+                nActive
+            );
         }
 
         if (hasStruts_)
         {
             forAll(struts_, i)
             {
-                struts_[i].constructInfluenceCellList(innerStep);
+                struts_[i].constructInfluenceCellList
+                (
+                    innerStep,
+                    globalToLocal,
+                    nActive
+                );
             }
         }
 
         if (hasShaft_)
         {
             // Add source for tower actuator line
-            shaft_->constructInfluenceCellList(innerStep);
+            shaft_->constructInfluenceCellList
+            (
+                innerStep,
+                globalToLocal,
+                nActive
+            );
         }
         rotateAD();
+    }
+
+    activePositions_.setSize(nActive);
+    activeForceField_.setSize(nActive, Zero);
+    localToGlobal_.setSize(nActive);
+
+    const vectorField& C = mesh_.C();
+    forAll(globalToLocal, globalI)
+    {
+        label localI = globalToLocal[globalI];
+
+        if (localI != -1)
+        {
+            activePositions_[localI] = C[globalI];
+            localToGlobal_[localI] = globalI;
+        }
+    }
+
+    forAll(blades_, i)
+    {
+        blades_[i].setCompactFields(activePositions_, activeForceField_);
+    }
+    if (hasStruts_)
+    {
+        forAll(struts_, i)
+        {
+            struts_[i].setCompactFields
+            (
+                activePositions_,
+                activeForceField_
+            );
+        }
+    }
+
+    if (hasShaft_)
+    {
+        // Add source for tower actuator line
+        shaft_->setCompactFields
+        (
+            activePositions_,
+            activeForceField_
+        );
     }
 }
 
@@ -546,6 +648,20 @@ bool Foam::fv::crossFlowTurbineADSource::read(const dictionary& dict)
         
         // Get blade multiplier
         bladeMultiplier_ = coeffs_.lookupOrDefault("bladeMultiplier", 1.0);
+
+        // Get compact field
+        compactField_ = coeffs_.lookupOrDefault("compactField", true);
+
+        // Get compact field
+        cacheInteractions_ = coeffs_.lookupOrDefault("cacheInteractions", true);
+
+        // For simplicity, ensure that cacheInteractions cannot be true when
+        // compactField is false, to avoid having to implement this path
+        // as the interctions cache is the memory consuming part
+        if (compactField_ == false)
+        {
+            cacheInteractions_ = false;
+        }
         
         return true;
     }

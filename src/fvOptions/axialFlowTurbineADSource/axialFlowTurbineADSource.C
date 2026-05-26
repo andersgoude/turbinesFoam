@@ -76,12 +76,12 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
     {
         blades_[i].setApplyForce(false);
     }
-    
+
     if (hasHub_)
     {
         hub_->setApplyForce(false);
     }
-    
+
     if (hasTower_)
     {
         tower_->setApplyForce(false);
@@ -99,7 +99,6 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
 
 
 // * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
-
 Foam::fv::axialFlowTurbineADSource::~axialFlowTurbineADSource()
 {}
 
@@ -176,26 +175,33 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     const volVectorField& Uin(eqn.psi());
     interpolationCellPoint<vector> UInterp(Uin);
 
-    Info << "Before first use" << endl;
     if (firstUse_)
     {
         buildInfluenceCells();
         angleDeg_ = 0;
         firstUse_ = false;
     }
-    Info << "after first use" << endl;
     
     // code can run extra revolutions to make dynamic stall converge
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
-        // forceField_ should be the average during one revolution here
-        forceField_.primitiveFieldRef() = vector::zero;
-        forceField_.correctBoundaryConditions();
-
-        // Check dimensions of force field and correct if necessary
-        if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+        // If compressed field, set that one to 0,
+        // otherwise the whole force field
+        if (activeForceField_.size() > 0)
         {
-            forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+            activeForceField_ = vector::zero;
+        }
+        else
+        {
+            // forceField_ should be the average during one revolution here
+            forceField_.primitiveFieldRef() = vector::zero;
+            forceField_.correctBoundaryConditions();
+
+            // Check dimensions of force field and correct if necessary
+            if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+            {
+                forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+            }
         }
         
         // tower and nacelle are not rotating,
@@ -317,6 +323,16 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             rotateAD();
         }
     }
+
+    // When using compressed fields, restore them to the original forceField
+    if (activeForceField_.size() > 0)
+    {
+        forAll(localToGlobal_, forceIndex)
+        {
+            forceField_[localToGlobal_[forceIndex]] =
+                activeForceField_[forceIndex];
+        }
+    }
     eqn += forceField_;
 }
 
@@ -341,15 +357,23 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     // code can run extra revolutions to make dynamic stall converge
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
-        // forceField_ should be the average during one revolution here
-        forceField_ *=
-            dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-
-        // Check dimensions of force field and correct if necessary
-        if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+        if (activeForceField_.size() > 0)
         {
-            forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+            activeForceField_ = vector::zero;
         }
+        else
+        {
+            // forceField_ should be the average during one revolution here
+            forceField_.primitiveFieldRef() = vector::zero;
+            forceField_.correctBoundaryConditions();
+
+            // Check dimensions of force field and correct if necessary
+            if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+            {
+                forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+            }
+        }
+
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
         {
             // Zero out force vector and field
@@ -471,6 +495,17 @@ void Foam::fv::axialFlowTurbineADSource::addSup
             rotateAD();
         }
     }
+
+    // When using compressed fields, restore them to the original forceField
+    if (activeForceField_.size() > 0)
+    {
+        forAll(localToGlobal_, forceIndex)
+        {
+            forceField_[localToGlobal_[forceIndex]] =
+                activeForceField_[forceIndex];
+        }
+    }
+
     // multiply with local density
     forceField_ *= rho;
     
@@ -542,52 +577,123 @@ void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
 {
     forAll(blades_, i)
     {
-        blades_[i].allocateInfluenceCells(divisions_);
+        blades_[i].allocateInfluenceCells(divisions_, cacheInteractions_);
     }
 
     if (hasHub_)
     {
         // Add source for hub actuator line
-        hub_->allocateInfluenceCells(divisions_);
+        hub_->allocateInfluenceCells(divisions_, cacheInteractions_);
     }
 
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->allocateInfluenceCells(divisions_);
+        tower_->allocateInfluenceCells(divisions_, cacheInteractions_);
     }
 
     if (hasNacelle_)
     {
         // Add source for nacelle actuator line
-        nacelle_->allocateInfluenceCells(divisions_);
+        nacelle_->allocateInfluenceCells(divisions_, cacheInteractions_);
     }
+
+    //- Allocations are still needed for velocity lookup, but if compactField
+    // is false, we do not need influenceCells
+    if (compactField_ == false)
+    {
+        return;
+    }
+
+    labelList globalToLocal(mesh_.nCells(), -1);
+
+    label nActive = 0;
     for (label innerStep = 0; innerStep < divisions_; innerStep++)
     {
         // Add scalar source term from blades
         forAll(blades_, i)
         {
-            blades_[i].constructInfluenceCellList(innerStep);
+            blades_[i].constructInfluenceCellList
+            (
+                innerStep,
+                globalToLocal,
+                nActive
+            );
         }
 
         if (hasHub_)
         {
             // Add source for hub actuator line
-            hub_->constructInfluenceCellList(innerStep);
+            hub_->constructInfluenceCellList
+            (
+                innerStep,
+                globalToLocal,
+                nActive
+            );
         }
 
         if (hasTower_)
         {
             // Add source for tower actuator line
-            tower_->constructInfluenceCellList(innerStep);
+            tower_->constructInfluenceCellList
+            (
+                innerStep,
+                globalToLocal,
+                nActive
+            );
         }
 
         if (hasNacelle_)
         {
             // Add source for nacelle actuator line
-            nacelle_->constructInfluenceCellList(innerStep);
+            nacelle_->constructInfluenceCellList
+            (
+                innerStep,
+                globalToLocal,
+                nActive
+            );
         }
         rotateAD();
+    }
+    Info << "Active cells participating in the force field: " << nActive << " of " << mesh_.nCells() << endl;
+
+    activePositions_.setSize(nActive);
+    activeForceField_.setSize(nActive, Zero);
+    localToGlobal_.setSize(nActive);
+
+    const vectorField& C = mesh_.C();
+    forAll(globalToLocal, globalI)
+    {
+        label localI = globalToLocal[globalI];
+
+        if (localI != -1)
+        {
+            activePositions_[localI] = C[globalI];
+            localToGlobal_[localI] = globalI;
+        }
+    }
+
+    forAll(blades_, i)
+    {
+        blades_[i].setCompactFields(activePositions_, activeForceField_);
+    }
+
+    if (hasHub_)
+    {
+        // Add source for hub actuator line
+        hub_->setCompactFields(activePositions_, activeForceField_);
+    }
+
+    if (hasTower_)
+    {
+        // Add source for tower actuator line
+        tower_->setCompactFields(activePositions_, activeForceField_);
+    }
+
+    if (hasNacelle_)
+    {
+        // Add source for nacelle actuator line
+        nacelle_->setCompactFields(activePositions_, activeForceField_);
     }
 }
 
@@ -606,7 +712,21 @@ bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
         
         // Get blade multiplier
         bladeMultiplier_ = coeffs_.lookupOrDefault("bladeMultiplier", 1);
-        
+
+        // Get compact field
+        compactField_ = coeffs_.lookupOrDefault("compactField", true);
+
+        // Get compact field
+        cacheInteractions_ = coeffs_.lookupOrDefault("cacheInteractions", true);
+
+        // For simplicity, ensure that cacheInteractions cannot be true when
+        // compactField is false, to avoid having to implement this path
+        // as the interctions cache is the memory consuming part
+        if (compactField_ == false)
+        {
+            cacheInteractions_ = false;
+        }
+
         return true;
     }
     else

@@ -762,7 +762,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     forAll(blades_, i)
     {
         blades_[i].addForce(eqn, UInterp, forceField_, fieldI, 1.0);
-        //forceField_ += blades_[i].forceField();
+        forceField_ += blades_[i].forceField();
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
         moment += bladeMoments_[i];
@@ -772,7 +772,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     {
         // Add source for hub actuator line
         hub_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
-        //forceField_ += hub_->forceField();
+        forceField_ += hub_->forceField();
         force_ += hub_->force();
         moment += hub_->moment(origin_);
     }
@@ -781,7 +781,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     {
         // Add source for tower actuator line
         tower_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
-        //forceField_ += tower_->forceField();
+        forceField_ += tower_->forceField();
         if (includeTowerDrag_)
         {
             force_ += tower_->force();
@@ -792,7 +792,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     {
         // Add source for tower actuator line
         nacelle_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
-        //forceField_ += nacelle_->forceField();
+        forceField_ += nacelle_->forceField();
         if (includeNacelleDrag_)
         {
             force_ += nacelle_->force();

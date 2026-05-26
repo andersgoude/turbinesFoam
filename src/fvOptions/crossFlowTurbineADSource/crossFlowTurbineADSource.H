@@ -71,9 +71,24 @@ protected:
 
         //- internal time used to perform a loop within the openfoam-step
         scalar customTime_;
+
+        //- Compress the interaction field to improve memory acces
+        bool compactField_;
+
+        //- Cache intearction point list to avoid unnecessary iterations
+        bool cacheInteractions_;
         
         //-first time step indicator, used to determine when to build cells
         bool firstUse_;
+
+        //- Cached positions for more compact disc operations
+        labelList localToGlobal_;
+
+        //- Cached positions for more compact disc operations
+        vectorField activePositions_;
+
+        //- ForceField corresponding to the compact field
+        vectorField activeForceField_;
         
         
     // Protected Member Functions

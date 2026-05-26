@@ -126,6 +126,27 @@ protected:
         //- Previously found cell, to prevent unnecessary lookups
         label previousProcI_;
 
+        //- Previously found cell, to prevent unnecessary lookups
+        point previousLocation_;
+
+        //- Previously found cell, to prevent unnecessary lookups
+        bool previousLocationValid_;
+
+        //- for acutatorDisc, have previous positions stored for fast lookup
+        List<label> centerCellI_;
+
+        //- for acutatorDisc, have previous positions stored for fast lookup
+        List<label> centerProcI_;
+
+        //- for actuatorDisc, ring sampling
+        List<List<label>> ringCellI_;
+
+        //- for actuatorDisc, ring sampling
+        List<List<label>> ringProcI_;
+
+        //- active ring index for caching
+        label activeRingIndex_;
+
         //- Relative flow velocity
         vector relativeVelocity_;
 
@@ -186,8 +207,14 @@ protected:
         //- Switch for writing performance
         bool writePerf_;
 
-        //- Output file stream
-        OFstream* outputFile_;
+        //- Switch for writing performance only at final step
+        bool writePerfEnd_;
+
+        //- Output file stream (Foam::OFStream does not work with destructor)
+        std::ofstream outputFile_;
+
+        //- For WritePerfEnd, save to stream instead
+        std::stringstream stringBuffer_;
 
         //- Nondimensional distance from actuator line root
         scalar rootDistance_;
@@ -209,10 +236,19 @@ protected:
 
         //- Number of elements used to sample velocities
         label nVelocitySamples_;
-        
+
         //- List of cell indices for the actuatorDisc loop
-        List<labelList> influenceCells_;
-        
+        List<List<label>> influenceCells_;
+
+        //- List of cell indices for the actuatorDisc loop
+        List<label> tmpInfluenceCells_;
+
+        //- ActuatorDisc - pointer to the compact field of the owner class
+        vectorField *activePositionsPtr_;
+
+        //- ActuatorDisc - pointer to the compact field of the owner class
+        vectorField *activeForceFieldPtr_;
+
         //- the current azimuthIndex to use for the influenceCells
         label azimuthIndex_;
 
@@ -262,6 +298,9 @@ protected:
 
         //- Write performance to CSV
         void writePerf();
+
+        //- Check if it is the last iteration for actuator disc
+        bool isLastIteration() const;
 
 
 public:
@@ -428,10 +467,22 @@ public:
             );
 
             //- allocate the list of influence cells (for actuator disc)
-            void allocateInfluenceCells(label count);
+            void allocateInfluenceCells(label count, bool cacheInteractions);
 
             //- Create the list of influence cells for one angle
-            void constructInfluenceCellList(label azimuthIndex);
+            void constructInfluenceCellList
+            (
+                label azimuthIndex,
+                labelList& globalToLocal,
+                label& nActive
+            );
+
+            //- For actuatorDisc, set the compact position and force fields
+            void setCompactFields
+            (
+                vectorField& activePositions,
+                vectorField& activeForceField
+            );
             
             //- allocate the list of influence cells (for actuator disc)
             void setAzimuthIndex(label azimuthIndex);
@@ -473,7 +524,6 @@ public:
                 volVectorField& force,
                 scalar scale
             );
-
 };
 
 

@@ -96,8 +96,14 @@ protected:
         //- Switch for writing performance
         bool writePerf_;
 
-        //- Output file stream
-        OFstream* outputFile_;
+        //- Switch for writing performance only at final step
+        bool writePerfEnd_;
+
+        //- Output file stream (Foam::OFStream does not work with destructor)
+        std::ofstream outputFile_;
+
+        //- For WritePerfEnd, save to stream instead
+        std::stringstream stringBuffer_;
 
         //- Switch for harmonic pitching
         bool harmonicPitchingActive_;
@@ -225,10 +231,26 @@ public:
             void setApplyForce(bool active);
 
             //- Setup code for actuatorDisc to speed up calculations
-            void allocateInfluenceCells(label divisions_);
+            void allocateInfluenceCells
+            (
+                label divisions_,
+                bool cacheInteractions_
+            );
 
             //- Setup code for actuatorDisc to speed up calculations
-            void constructInfluenceCellList(label azimuthIndex);
+            void constructInfluenceCellList
+            (
+                label azimuthIndex,
+                labelList& globalToLocal,
+                label& nActive
+            );
+
+            //- For actuatorDisc, set the compact position and force fields
+            void setCompactFields
+            (
+                vectorField& activePositions,
+                vectorField& activeForceField
+            );
 
             //- Setup code for actuatorDisc to speed up calculations
             void setAzimuthIndex(label azimuthIndex);
