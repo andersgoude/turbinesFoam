@@ -325,14 +325,8 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     }
 
     // When using compressed fields, restore them to the original forceField
-    if (activeForceField_.size() > 0)
-    {
-        forAll(localToGlobal_, forceIndex)
-        {
-            forceField_[localToGlobal_[forceIndex]] =
-                activeForceField_[forceIndex];
-        }
-    }
+    updateForceField();
+
     eqn += forceField_;
 }
 
@@ -497,18 +491,11 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     }
 
     // When using compressed fields, restore them to the original forceField
-    if (activeForceField_.size() > 0)
-    {
-        forAll(localToGlobal_, forceIndex)
-        {
-            forceField_[localToGlobal_[forceIndex]] =
-                activeForceField_[forceIndex];
-        }
-    }
+    updateForceField();
 
     // multiply with local density
     forceField_ *= rho;
-    
+
     eqn += forceField_;
 }
 
@@ -659,6 +646,7 @@ void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
 
     activePositions_.setSize(nActive);
     activeForceField_.setSize(nActive, Zero);
+    filteredForceField_.setSize(0);
     localToGlobal_.setSize(nActive);
 
     const vectorField& C = mesh_.C();
@@ -698,6 +686,87 @@ void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
 }
 
 
+void Foam::fv::axialFlowTurbineADSource::updateForceField()
+{
+    if (relaxForceField_)
+    {
+        if (filteredForceField_.size() == 0)
+        {
+            filteredForceField_ = activeForceField_;
+            forAll(localToGlobal_, forceIndex)
+            {
+                forceField_[localToGlobal_[forceIndex]] =
+                    filteredForceField_[forceIndex];
+            }
+        }
+        else
+        {
+            if (mesh_.time().value() < relaxStartTime_)
+            {
+                filteredForceField_ = activeForceField_;
+                forAll(localToGlobal_, forceIndex)
+                {
+                    forceField_[localToGlobal_[forceIndex]] =
+                        filteredForceField_[forceIndex];
+                }
+            }
+            else
+            {
+                scalar alpha = 1.0/(1.0 + relaxValue_);
+                forAll(localToGlobal_, forceIndex)
+                {
+                    filteredForceField_[forceIndex] =
+                        (1 - alpha)*filteredForceField_[forceIndex]
+                        + alpha*activeForceField_[forceIndex];
+                    forceField_[localToGlobal_[forceIndex]] =
+                        filteredForceField_[forceIndex];
+                }
+                if (relaxGrowthValue_ > 0)
+                {
+                    if (relaxGrowthThreshold_ > 0)
+                    {
+                        // Difference field
+                        vectorField diff =
+                            activeForceField_ - filteredForceField_;
+
+                        // L2 norm of the difference
+                        scalar diffL2 = Foam::sqrt(Foam::sum(magSqr(diff)));
+
+                        // L2 norm of the reference field
+                        scalar refL2 =
+                            Foam::sqrt(Foam::sum(magSqr(filteredForceField_)));
+
+                        scalar relativeChange = diffL2 / (refL2 + SMALL);
+                        if (relativeChange > relaxGrowthThreshold_)
+                        {
+                            relaxValue_ += relaxGrowthValue_;
+                        }
+                    }
+                    else
+                    {
+                        relaxValue_ += relaxGrowthValue_;
+                    }
+                }
+                if (relaxValue_ < relaxMaxValue_)
+                {
+                    relaxValue_ = relaxMaxValue_;
+                }
+            }
+        }
+    }
+    else
+    {
+        if (activeForceField_.size() > 0)
+        {
+            forAll(localToGlobal_, forceIndex)
+            {
+                forceField_[localToGlobal_[forceIndex]] =
+                    activeForceField_[forceIndex];
+            }
+        }
+    }
+}
+
 bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
 {
     if (cellSetOption::read(dict))
@@ -725,6 +794,26 @@ bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
         if (compactField_ == false)
         {
             cacheInteractions_ = false;
+        }
+
+        // Get if we should apply relaxation to the force field
+        relaxForceField_ = coeffs_.lookupOrDefault("relaxForceField", false);
+        relaxStartTime_ = coeffs_.lookupOrDefault("relaxStartTime", 0);
+        relaxValue_ = coeffs_.lookupOrDefault("relaxStartValue", 0.3);
+        relaxGrowthValue_ = coeffs_.lookupOrDefault("relaxGrowthValue", 0.02);
+        relaxGrowthThreshold_ =
+            coeffs_.lookupOrDefault("relaxGrowthThreshold", 0.0);
+        relaxMaxValue_ = coeffs_.lookupOrDefault("relaxMaxValue", 0.02);
+
+        if (debug)
+        {
+            Info << "relaxForceField_ " << relaxForceField_
+                 << " relaxStartTime_ " << relaxStartTime_
+                 << " relaxValue_ " << relaxValue_
+                 << " relaxGrowthValue_ " << relaxGrowthValue_
+                 << " relaxGrowthThreshold_ " << relaxGrowthThreshold_
+                 << " relaxMaxValue_ " << relaxMaxValue_
+                 << endl;
         }
 
         return true;

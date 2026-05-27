@@ -89,6 +89,27 @@ protected:
 
         //- ForceField corresponding to the compact field
         vectorField activeForceField_;
+
+        //- ForceField after relaxation is applied
+        vectorField filteredForceField_;
+
+        //- Apply relaxation to force field
+        bool relaxForceField_;
+
+        //- Starting iteration for relaxation
+        label relaxStartTime_;
+
+        //- Relaxation value (note equation is 1/(1+relaxValue_))
+        scalar relaxValue_;
+
+        //- Relaxation growth factor (relaxation += relaxGrowthValue_)
+        scalar relaxGrowthValue_;
+
+        //- Only grow if relative difference is larger than threshold
+        scalar relaxGrowthThreshold_;
+
+        //- Peak value for relaxation
+        scalar relaxMaxValue_;
         
         
     // Protected Member Functions
@@ -102,6 +123,9 @@ protected:
 
         //- Set up a list of neighbor cells for faster force projection
         void buildInfluenceCells();
+
+        //- Apply the forcefield with relaxation
+        void updateForceField();
 
         //- Rotate the turbine a specified angle about its axis
         virtual void rotate(scalar radians);
