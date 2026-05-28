@@ -575,6 +575,19 @@ void Foam::fv::crossFlowTurbineADSource::buildInfluenceCells()
         }
         rotateAD();
     }
+    label localCells = mesh_.nCells();
+    label nCellsGlobal = localCells;
+    reduce(nCellsGlobal, sumOp<label>());
+
+    label nActiveGlobal = nActive;
+    reduce(nActiveGlobal, sumOp<label>());
+
+    // Print only once
+    if (Pstream::master())
+    {
+        Info<< "Active cells participating in the force field: "
+            << nActiveGlobal << " of " << nCellsGlobal << endl;
+    }
 
     activePositions_.setSize(nActive);
     activeForceField_.setSize(nActive, Zero);
