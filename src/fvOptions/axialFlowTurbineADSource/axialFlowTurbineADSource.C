@@ -187,21 +187,24 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     {
         // If compressed field, set that one to 0,
         // otherwise the whole force field
-        if (activeForceField_.size() > 0)
+        if (compactField_)
         {
-            activeForceField_ = vector::zero;
+            if (activeForceField_.size() > 0)
+            {
+                activeForceField_ = vector::zero;
+            }
         }
         else
         {
             // forceField_ should be the average during one revolution here
             forceField_.primitiveFieldRef() = vector::zero;
-            forceField_.correctBoundaryConditions();
+        }
+        forceField_.correctBoundaryConditions();
 
-            // Check dimensions of force field and correct if necessary
-            if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-            {
-                forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-            }
+        // Check dimensions of force field and correct if necessary
+        if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+        {
+            forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
         }
         
         // tower and nacelle are not rotating,
@@ -351,21 +354,24 @@ void Foam::fv::axialFlowTurbineADSource::addSup
     // code can run extra revolutions to make dynamic stall converge
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
     {
-        if (activeForceField_.size() > 0)
+        if (compactField_)
         {
-            activeForceField_ = vector::zero;
+            if (activeForceField_.size() > 0)
+            {
+                activeForceField_ = vector::zero;
+            }
         }
         else
         {
             // forceField_ should be the average during one revolution here
             forceField_.primitiveFieldRef() = vector::zero;
-            forceField_.correctBoundaryConditions();
+        }
+        forceField_.correctBoundaryConditions();
 
-            // Check dimensions of force field and correct if necessary
-            if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-            {
-                forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-            }
+        // Check dimensions of force field and correct if necessary
+        if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+        {
+            forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
         }
 
         for (int innerStep = 0; innerStep < divisions_; innerStep++)
