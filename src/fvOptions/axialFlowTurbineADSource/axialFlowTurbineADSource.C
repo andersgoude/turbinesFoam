@@ -94,7 +94,8 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
     //buildInfluenceCells();
     // reset these after buildInfluenceCells
     customTime_ = mesh.time().value();
-    angleDeg_ = 0;
+    baseAngleDeg_ = 0;
+    angleDeg_[0] = 0;
 }
 
 
@@ -102,44 +103,30 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
 Foam::fv::axialFlowTurbineADSource::~axialFlowTurbineADSource()
 {}
 
-
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
 void Foam::fv::axialFlowTurbineADSource::rotateAD(bool updateOnly)
 {
     scalar radians = 2*mathematical::pi/divisions_;
-    scalar deltaT = radians/omega_;
+    customDeltaT_ = radians/omega_;
 
     //updateOnly is intended for first step only to set custom speed
     if (updateOnly == false)
     {
-        customTime_ += deltaT;
+        customTime_[azimuthIndex_] = baseCustomTime_;
+        baseCustomTime_ += customDeltaT_;
         rotate(radians);
-        angleDeg_ += radToDeg(radians);
+        angleDeg_[azimuthIndex_] = baseAngleDeg_;
+        baseAngleDeg_ += radToDeg(radians);
         //lastRotationTime_ = time_.value();
     }
     updateTSROmega();
 
     //Info << "rotateAD called for time " << time_.value()
     //     << " custom time: " << customTime_ << endl;
-    forAll(blades_, i)
+    forAll(actuatorLines_, i)
     {
-        blades_[i].setCustomTime(customTime_, deltaT);
-    }
-
-    if (hasHub_)
-    {
-        hub_->setCustomTime(customTime_, deltaT);
-    }
-
-    if (hasTower_)
-    {
-        tower_->setCustomTime(customTime_, deltaT);
-    }
-
-    if (hasNacelle_)
-    {
-        nacelle_->setCustomTime(customTime_, deltaT);
+        actuatorLines_[i]->setCustomTime(baseCustomTime_, customDeltaT_);
     }
 }
 
@@ -164,410 +151,10 @@ void Foam::fv::axialFlowTurbineADSource::rotate(scalar radians)
     }
 }
 
-
-void Foam::fv::axialFlowTurbineADSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
+void Foam::fv::axialFlowTurbineADSource::allocateAL()
 {
-    // Generate UInterp object to be used for all velocity interpolations
-    const volVectorField& Uin(eqn.psi());
-    interpolationCellPoint<vector> UInterp(Uin);
-
-    if (firstUse_)
-    {
-        buildInfluenceCells();
-        angleDeg_ = 0;
-        firstUse_ = false;
-    }
-    
-    // code can run extra revolutions to make dynamic stall converge
-    for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
-    {
-        // If compressed field, set that one to 0,
-        // otherwise the whole force field
-        if (compactField_)
-        {
-            if (activeForceField_.size() > 0)
-            {
-                activeForceField_ = vector::zero;
-            }
-        }
-        else
-        {
-            // forceField_ should be the average during one revolution here
-            forceField_.primitiveFieldRef() = vector::zero;
-        }
-        forceField_.correctBoundaryConditions();
-
-        // Check dimensions of force field and correct if necessary
-        if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-        {
-            forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-        }
-        
-        // tower and nacelle are not rotating,
-        // so we only need to calculate the force field once
-        if (hasTower_)
-        {
-            // Add source for tower actuator line
-            tower_->setAzimuthIndex(0);
-            tower_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
-        }
-
-        if (hasNacelle_)
-        {
-            // Add source for tower actuator line
-            nacelle_->setAzimuthIndex(0);
-            nacelle_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
-        }
-        for (int innerStep = 0; innerStep < divisions_; innerStep++)
-        {
-            // Zero out force vector and field
-            force_ *= 0;
-
-            // Create local moment vector
-            vector moment(vector::zero);
-            
-            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
-            {
-                // Calculate end effects based on current velocity field
-                calcEndEffects();
-            }
-
-            // Add source for blade actuator lines
-            forAll(blades_, i)
-            {
-                blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addForce
-                (
-                    eqn,
-                    UInterp,
-                    forceField_,
-                    fieldI,
-                    bladeMultiplier_/divisions_
-                );
-                //forceField_ +=
-                //    (bladeMultiplier_/divisions_)*blades_[i].forceField();
-                //Info<< "Added blade" << endl;
-                force_ += bladeMultiplier_*blades_[i].force();
-                bladeMoments_[i] = blades_[i].moment(origin_);
-                moment += bladeMultiplier_*bladeMoments_[i];
-            }
-
-            if (hasHub_)
-            {
-                // Add source for hub actuator line
-                hub_->setAzimuthIndex(innerStep);
-                hub_->addForce
-                (
-                    eqn,
-                    UInterp,
-                    forceField_,
-                    fieldI,
-                    1.0/divisions_
-                );
-            //    forceField_ += (1.0/divisions_)*hub_->forceField();
-                force_ += hub_->force();
-                moment += hub_->moment(origin_);
-            }
-
-            if (hasTower_)
-            {
-                // Add source for tower actuator line
-                //tower_->addSup(eqn, fieldI);
-                //forceField_ += (1.0/divisions_)*tower_->forceField();
-                if (includeTowerDrag_)
-                {
-                    force_ += tower_->force();
-                }
-            }
-
-            if (hasNacelle_)
-            {
-                // Add source for tower actuator line
-                //nacelle_->addSup(eqn, fieldI);
-                //forceField_ += (1.0/divisions_)*nacelle_->forceField();
-                if (includeNacelleDrag_)
-                {
-                    force_ += nacelle_->force();
-                }
-            }
-
-            // only needed to to do calculations for the actual loop,
-            // not the dummy loops that are used to make dynamic stall converge
-            if (currentLoop == dynStallLoop_ - 1)
-            {
-                // Torque is the projection of the moment from
-                // all blades on the axis
-                torque_ = moment & axis_;
-
-                torqueCoefficient_ =
-                    torque_/(0.5*frontalArea_*rotorRadius_
-                    * magSqr(freeStreamVelocity_));
-                powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ =
-                    force_ & freeStreamDirection_
-                    / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
-
-
-                // Print performance to terminal
-                printPerf();
-
-                // Write performance data
-                // Note this will write multiples if there are
-                // multiple PIMPLE loops
-                if (Pstream::master())
-                {
-                    writePerf();
-                }
-            }
-            rotateAD();
-        }
-    }
-
-    // When using compressed fields, restore them to the original forceField
-    updateForceField();
-
-    eqn += forceField_;
-}
-
-
-void Foam::fv::axialFlowTurbineADSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    // Generate UInterp object to be used for all velocity interpolations
-    const volVectorField& Uin(eqn.psi());
-    interpolationCellPoint<vector> UInterp(Uin);
-
-    if (firstUse_)
-    {
-        buildInfluenceCells();
-        angleDeg_ = 0;
-        firstUse_ = false;
-    }
-    // code can run extra revolutions to make dynamic stall converge
-    for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
-    {
-        if (compactField_)
-        {
-            if (activeForceField_.size() > 0)
-            {
-                activeForceField_ = vector::zero;
-            }
-        }
-        else
-        {
-            // forceField_ should be the average during one revolution here
-            forceField_.primitiveFieldRef() = vector::zero;
-        }
-        forceField_.correctBoundaryConditions();
-
-        // Check dimensions of force field and correct if necessary
-        if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-        {
-            forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-        }
-
-        for (int innerStep = 0; innerStep < divisions_; innerStep++)
-        {
-            // Zero out force vector and field
-            force_ *= 0;
-
-            // Create local moment vector
-            vector moment(vector::zero);
-            
-            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
-            {
-                // Calculate end effects based on current velocity field
-                calcEndEffects();
-            }
-
-            // Add source for blade actuator lines
-            forAll(blades_, i)
-            {
-                blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addForce
-                (
-                    rho,
-                    eqn,
-                    UInterp,
-                    forceField_,
-                    fieldI,
-                    bladeMultiplier_/divisions_
-                );
-                //forceField_ +=
-                //    (bladeMultiplier_/divisions_)*blades_[i].forceField();
-                force_ += bladeMultiplier_*blades_[i].force();
-                bladeMoments_[i] = blades_[i].moment(origin_);
-                moment += bladeMultiplier_*bladeMoments_[i];
-            }
-
-            if (hasHub_)
-            {
-                // Add source for hub actuator line
-                hub_->setAzimuthIndex(innerStep);
-                hub_->addForce
-                (
-                    rho,
-                    eqn,
-                    UInterp,
-                    forceField_,
-                    fieldI,
-                    1.0/divisions_
-                );
-                //forceField_ += (1.0/divisions_)*hub_->forceField();
-                force_ += hub_->force();
-                moment += hub_->moment(origin_);
-            }
-
-            if (hasTower_)
-            {
-                // Add source for tower actuator line
-                tower_->setAzimuthIndex(innerStep);
-                tower_->addForce
-                (
-                    rho,
-                    eqn,
-                    UInterp,
-                    forceField_,
-                    fieldI,
-                    1.0/divisions_
-                );
-                //forceField_ += (1.0/divisions_)*tower_->forceField();
-                if (includeTowerDrag_)
-                {
-                    force_ += tower_->force();
-                }
-            }
-
-            if (hasNacelle_)
-            {
-                // Add source for tower actuator line
-                nacelle_->setAzimuthIndex(innerStep);
-                nacelle_->addForce
-                (
-                    rho,
-                    eqn,
-                    UInterp,
-                    forceField_,
-                    fieldI,
-                    1.0/divisions_
-                );
-                //forceField_ += (1.0/divisions_)*nacelle_->forceField();
-                if (includeNacelleDrag_)
-                {
-                    force_ += nacelle_->force();
-                }
-            }
-
-            if (currentLoop == dynStallLoop_ - 1)
-            {
-                // Torque is the projection of the moment from all blades
-                // on the axis
-                torque_ = moment & axis_;
-
-                scalar rhoRef;
-                coeffs_.lookup("rhoRef") >> rhoRef;
-                torqueCoefficient_ =
-                    torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
-                    * magSqr(freeStreamVelocity_));
-                powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-                dragCoefficient_ =
-                    force_ & freeStreamDirection_
-                    / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
-
-                // Print performance to terminal
-                printPerf();
-
-                // Write performance data -- note this will write multiples
-                // if there are multiple PIMPLE loops
-                if (Pstream::master())
-                {
-                    writePerf();
-                }
-            }
-            rotateAD();
-        }
-    }
-
-    // When using compressed fields, restore them to the original forceField
-    updateForceField();
-
-    // multiply with local density
-    forceField_ *= rho;
-
-    eqn += forceField_;
-}
-
-
-void Foam::fv::axialFlowTurbineADSource::addSup
-(
-    fvMatrix<scalar>& eqn,
-    const label fieldI
-)
-{
-    if (firstUse_)
-    {
-        buildInfluenceCells();
-        angleDeg_ = 0;
-        firstUse_ = false;
-    }
-    // code can run extra revolutions to make dynamic stall converge
-    for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
-    {
-        // forceField_ should be the average during one revolution here
-        fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
-        kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-        for (int innerStep = 0; innerStep < divisions_; innerStep++)
-        {
-            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
-            {
-                // Calculate end effects based on current velocity field
-                calcEndEffects();
-            }
-            
-            // Add scalar source term from blades
-            forAll(blades_, i)
-            {
-                blades_[i].setAzimuthIndex(innerStep);
-                blades_[i].addSup(kField, fieldI);
-            }
-
-            if (hasHub_)
-            {
-                // Add source for hub actuator line
-                hub_->setAzimuthIndex(innerStep);
-                hub_->addSup(kField, fieldI);
-            }
-
-            if (hasTower_)
-            {
-                // Add source for tower actuator line
-                tower_->setAzimuthIndex(innerStep);
-                tower_->addSup(kField, fieldI);
-            }
-
-            if (hasNacelle_)
-            {
-                // Add source for nacelle actuator line
-                nacelle_->setAzimuthIndex(innerStep);
-                nacelle_->addSup(kField, fieldI);
-            }
-            rotateAD();
-        }
-        eqn += (bladeMultiplier_/divisions_)*kField;
-    }
-}
-
-
-void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
-{
+    angleDeg_.setSize(divisions_);
+    customTime_.setSize(divisions_);
     forAll(blades_, i)
     {
         blades_[i].allocateInfluenceCells(divisions_, cacheInteractions_);
@@ -582,33 +169,85 @@ void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->allocateInfluenceCells(divisions_, cacheInteractions_);
+        tower_->allocateInfluenceCells(1, cacheInteractions_);
     }
 
     if (hasNacelle_)
     {
         // Add source for nacelle actuator line
-        nacelle_->allocateInfluenceCells(divisions_, cacheInteractions_);
+        nacelle_->allocateInfluenceCells(1, cacheInteractions_);
     }
+}
 
-    //- Allocations are still needed for velocity lookup, but if compactField
-    // is false, we do not need influenceCells
+void Foam::fv::axialFlowTurbineADSource::initializeAL()
+{
+    // if compactField is false, we do not need influenceCells
     if (compactField_ == false)
     {
         return;
     }
 
+    if (hasTower_)
+    {
+        tower_->setAzimuthIndex(0); // not really needed, remove later
+        tower_->calcInfluenceEpsilon();
+    }
+
+    if (hasNacelle_)
+    {
+        nacelle_->setAzimuthIndex(0); // not really needed, remove later
+        nacelle_->calcInfluenceEpsilon();
+    }
+    for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
+    {
+        forAll(blades_, i)
+        {
+            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].calcInfluenceEpsilon();
+        }
+
+        if (hasHub_)
+        {
+            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->calcInfluenceEpsilon();
+        }
+        rotateAD();
+    }
+    distributeEpsilon();
+
     labelList globalToLocal(mesh_.nCells(), -1);
 
     label nActive = 0;
-    for (label innerStep = 0; innerStep < divisions_; innerStep++)
+    if (hasTower_)
+    {
+        // Add source for tower actuator line
+        tower_->constructInfluenceCellList
+        (
+            0,
+            globalToLocal,
+            nActive
+        );
+    }
+
+    if (hasNacelle_)
+    {
+        // Add source for nacelle actuator line
+        nacelle_->constructInfluenceCellList
+        (
+            0,
+            globalToLocal,
+            nActive
+        );
+    }
+    for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         // Add scalar source term from blades
         forAll(blades_, i)
         {
+            blades_[i].setAzimuthIndex(azimuthIndex_);
             blades_[i].constructInfluenceCellList
             (
-                innerStep,
+                azimuthIndex_,
                 globalToLocal,
                 nActive
             );
@@ -617,36 +256,14 @@ void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
         if (hasHub_)
         {
             // Add source for hub actuator line
+            hub_->setAzimuthIndex(azimuthIndex_);
             hub_->constructInfluenceCellList
             (
-                innerStep,
+                azimuthIndex_,
                 globalToLocal,
                 nActive
             );
         }
-
-        if (hasTower_)
-        {
-            // Add source for tower actuator line
-            tower_->constructInfluenceCellList
-            (
-                innerStep,
-                globalToLocal,
-                nActive
-            );
-        }
-
-        if (hasNacelle_)
-        {
-            // Add source for nacelle actuator line
-            nacelle_->constructInfluenceCellList
-            (
-                innerStep,
-                globalToLocal,
-                nActive
-            );
-        }
-        rotateAD();
     }
     label localCells = mesh_.nCells();
     label nCellsGlobal = localCells;
@@ -679,28 +296,321 @@ void Foam::fv::axialFlowTurbineADSource::buildInfluenceCells()
         }
     }
 
-    forAll(blades_, i)
+    forAll(actuatorLines_, i)
     {
-        blades_[i].setCompactFields(activePositions_, activeForceField_);
+        actuatorLines_[i]->setCompactFields
+        (
+            activePositions_,
+            activeForceField_
+        );
     }
 
-    if (hasHub_)
-    {
-        // Add source for hub actuator line
-        hub_->setCompactFields(activePositions_, activeForceField_);
-    }
+    baseAngleDeg_ = 0;
+    angleDeg_[0] = 0;
+    firstUse_ = false;
+}
 
+void Foam::fv::axialFlowTurbineADSource::setupPositions(bool includeRing)
+{
+    // A bit more complicated than other turbine types,
+    // as tower and nacelle are not rotating
     if (hasTower_)
     {
-        // Add source for tower actuator line
-        tower_->setCompactFields(activePositions_, activeForceField_);
+        tower_->setAzimuthIndex(0); // not really needed, remove later
+        tower_->findCells(includeRing);
     }
 
     if (hasNacelle_)
     {
-        // Add source for nacelle actuator line
-        nacelle_->setCompactFields(activePositions_, activeForceField_);
+        nacelle_->setAzimuthIndex(0); // not really needed, remove later
+        nacelle_->findCells(includeRing);
     }
+    for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
+    {
+        forAll(blades_, i)
+        {
+            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].findCells(includeRing);
+        }
+
+        if (hasHub_)
+        {
+            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->findCells(includeRing);
+        }
+        rotateAD();
+    }
+}
+
+void Foam::fv::axialFlowTurbineADSource::calculateForces()
+{
+    // A bit more complicated than other turbine types,
+    // as tower and nacelle are not rotating
+    if (hasTower_)
+    {
+        tower_->setAzimuthIndex(0); // not really needed, remove later
+        tower_->calculateElementForces();
+    }
+
+    if (hasNacelle_)
+    {
+        nacelle_->setAzimuthIndex(0); // not really needed, remove later
+        nacelle_->calculateElementForces();
+    }
+    for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
+    {
+        for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
+        {
+            forAll(blades_, i)
+            {
+                blades_[i].setAzimuthIndex(azimuthIndex_);
+                blades_[i].setCustomTime
+                (
+                    customTime_[azimuthIndex_],
+                    customDeltaT_
+                );
+            }
+
+            if (hasHub_)
+            {
+                hub_->setAzimuthIndex(azimuthIndex_);
+                hub_->setCustomTime
+                (
+                    customTime_[azimuthIndex_],
+                    customDeltaT_
+                );
+            }
+
+            if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
+            {
+                // Calculate end effects based on current velocity field
+                calcEndEffects();
+            }
+            
+            forAll(blades_, i)
+            {
+                blades_[i].calculateElementForces();
+            }
+
+            if (hasHub_)
+            {
+                hub_->calculateElementForces();
+            }
+        }
+    }
+}
+
+void Foam::fv::axialFlowTurbineADSource::addForce
+(
+    fvMatrix<vector> &eqn,
+    volVectorField &forceField,
+    scalar scale,
+    bool compressible
+)
+{
+    // forceField_ should be the average during one revolution here
+    if (compactField_)
+    {
+        if (activeForceField_.size() > 0)
+        {
+            activeForceField_ = vector::zero;
+        }
+    }
+    else
+    {
+        forceField_.primitiveFieldRef() = vector::zero;
+    }
+    forceField_.correctBoundaryConditions();
+
+    // Check dimensions of force field and correct if necessary
+    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+    {
+        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+    }
+    
+    // tower and nacelle are not rotating,
+    // so we only need to calculate the force field once
+    if (hasTower_)
+    {
+        // Add source for tower actuator line
+        tower_->setAzimuthIndex(0);
+        tower_->addForce(eqn, forceField_, 1.0, compressible);
+    }
+
+    if (hasNacelle_)
+    {
+        // Add source for tower actuator line
+        nacelle_->setAzimuthIndex(0);
+        nacelle_->addForce(eqn, forceField_, 1.0, compressible);
+    }
+    for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
+    {
+        // Zero out force vector and field
+        force_ *= 0;
+
+        // Create local moment vector
+        vector moment(vector::zero);
+
+        // Should not be needed, but for future safety
+        forAll(actuatorLines_, i)
+        {
+            actuatorLines_[i]->setCustomTime
+            (
+                customTime_[azimuthIndex_],
+                customDeltaT_
+            );
+        }
+
+        // Add source for blade actuator lines
+        forAll(blades_, i)
+        {
+            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].addForce
+            (
+                eqn,
+                forceField_,
+                bladeMultiplier_/divisions_,
+                compressible
+            );
+            //forceField_ +=
+            //    (bladeMultiplier_/divisions_)*blades_[i].forceField();
+            //Info<< "Added blade" << endl;
+            force_ += bladeMultiplier_*blades_[i].force();
+            bladeMoments_[i] = blades_[i].moment(origin_);
+            moment += bladeMultiplier_*bladeMoments_[i];
+        }
+
+        if (hasHub_)
+        {
+            // Add source for hub actuator line
+            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->addForce
+            (
+                eqn,
+                forceField_,
+                1.0/divisions_,
+                compressible
+            );
+        //    forceField_ += (1.0/divisions_)*hub_->forceField();
+            force_ += hub_->force();
+            moment += hub_->moment(origin_);
+        }
+
+        if (hasTower_)
+        {
+            // Add source for tower actuator line
+            //tower_->addSup(eqn, fieldI);
+            //forceField_ += (1.0/divisions_)*tower_->forceField();
+            if (includeTowerDrag_)
+            {
+                force_ += tower_->force();
+            }
+        }
+
+        if (hasNacelle_)
+        {
+            // Add source for tower actuator line
+            //nacelle_->addSup(eqn, fieldI);
+            //forceField_ += (1.0/divisions_)*nacelle_->forceField();
+            if (includeNacelleDrag_)
+            {
+                force_ += nacelle_->force();
+            }
+        }
+
+        // Torque is the projection of the moment from
+        // all blades on the axis
+        torque_ = moment & axis_;
+
+        torqueCoefficient_ =
+            torque_/(0.5*frontalArea_*rotorRadius_
+            * magSqr(freeStreamVelocity_));
+        powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
+        dragCoefficient_ =
+            force_ & freeStreamDirection_
+            / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
+
+
+        // Print performance to terminal
+        printPerf();
+
+        // Write performance data
+        // Note this will write multiples if there are
+        // multiple PIMPLE loops
+        if (Pstream::master())
+        {
+            writePerf();
+        }
+    }
+
+    // When using compressed fields, restore them to the original forceField
+    updateForceField();
+}
+
+void Foam::fv::axialFlowTurbineADSource::addSup
+(
+    fvMatrix<vector>& eqn,
+    const label fieldI
+)
+{
+    calculateALData(fieldI);
+    
+    addForce(eqn, forceField_, 1.0, false);
+
+    eqn += forceField_;
+}
+
+
+void Foam::fv::axialFlowTurbineADSource::addSup
+(
+    const volScalarField& rho,
+    fvMatrix<vector>& eqn,
+    const label fieldI
+)
+{
+    calculateALData(fieldI);
+    
+    addForce(eqn, forceField_, 1.0, true);
+
+    // multiply with local density
+    forceField_ *= rho;
+
+    eqn += forceField_;
+}
+
+
+void Foam::fv::axialFlowTurbineADSource::addSup
+(
+    fvMatrix<scalar>& eqn,
+    const label fieldI
+)
+{
+    calculateALData(fieldI);
+
+    // forceField_ should be the average during one revolution here
+    fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
+    kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+    for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
+    {
+        if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
+        {
+            // Calculate end effects based on current velocity field
+            calcEndEffects();
+        }
+        
+        // Add scalar source term from blades
+        forAll(actuatorLines_, i)
+        {
+            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_);
+            actuatorLines_[i]->setCustomTime
+            (
+                customTime_[azimuthIndex_],
+                customDeltaT_
+            );
+            actuatorLines_[i]->addSup(kField, fieldI);
+        }
+    }
+    eqn += (bladeMultiplier_/divisions_)*kField;
 }
 
 
@@ -841,6 +751,5 @@ bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
         return false;
     }
 }
-
 
 // ************************************************************************* //

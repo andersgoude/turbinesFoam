@@ -22,20 +22,28 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::fv::crossFlowTurbineALSource
+    Foam::fv::actuatorModelBase
 
 Description
-    Cell based momentum source that represents a cross-flow turbine
+    Base class for all actuator models, with focus on handling parallel
+    computing efficiently
 
 SourceFiles
-    crossFlowTurbineALSource.C
+    actuatorModelBase.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef crossFlowTurbineALSource_H
-#define crossFlowTurbineALSource_H
+#ifndef actuatorModelBase_H
+#define actuatorModelBase_H
 
-#include "turbineALSource.H"
+#include "cellSetOption.H"
+//#include "NamedEnum.H"
+#include "vector.H"
+#include "volFieldsFwd.H"
+#include "fvMesh.H"
+#include "fvMatrices.H"
+#include "interpolationCellPoint.H"
+#include "OFstream.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -44,78 +52,96 @@ namespace Foam
 namespace fv
 {
 
+class actuatorLineSource;   // forward declaration
+
 /*---------------------------------------------------------------------------*\
-                      Class crossFlowTurbineALSource Declaration
+                      Class actuatorModelBase  Declaration
 \*---------------------------------------------------------------------------*/
 
-class crossFlowTurbineALSource
+class actuatorModelBase
 :
-    public turbineALSource
+    public cellSetOption
 {
 
 protected:
 
     // Protected data
 
-        //- Switch for struts
-        bool hasStruts_;
+        //- Mesh bounding box
+        boundBox meshBoundBox_;
 
-        //- Switch for shaft
-        bool hasShaft_;
+        //- Sample velocities
+        List<vector> velocities_;
 
-        //- List of actuator lines as struts
-        PtrList<actuatorLineSource> struts_;
+        //- point locations
+        List<vector> locations_;
 
-        //- Actuator line for shaft
-        autoPtr<actuatorLineSource> shaft_;
+        //- List of cell indices
+        List<label> cellI_;
 
-        //- Strut definitions dictionary
-        dictionary strutsDict_;
+        //. List of processor ownership
+        List<label> procI_;
+        
+        //- List of epsilon values for each actuator line element
+        List<scalar> epsilon_;
 
-        //- Shaft dictionary
-        dictionary shaftDict_;
+        //- List of density values for each actuator line element
+        List<scalar> rho_;
+        
+        //- All actuator lines belonging to this object (for fast iterations)
+        List<actuatorLineSource*> actuatorLines_;
 
+        //- Pointer to the density field (for compressible flow)
+        mutable const volScalarField* rhoPtr_;
+
+        //- Flag to indicate if the object has been initialized
+        bool initialized_;
+
+        //- Last time the inflow velocities were calculated
+        scalar lastTime_;
+
+        //- First field to be called from addSup,
+        // to avoid unnecessary calculations
+        label firstField_;
 
     // Protected Member Functions
 
-        //- Create actuator lines for blades
-        virtual void createBlades();
+        //- Gather data, calculate velocity and distribute
+        void calculateALData(label fieldI);
 
-        //- Create actuator lines for struts
-        void createStruts();
+        // Gather epsilon, reduce and distribute to all processors
+        void distributeEpsilon();
 
-        //- Create actuator line for shaft
-        void createShaft();
+        //- Alloction part of the initial setup
+        virtual void allocateAL();
 
-        //- Create the co-ordinate system
-        virtual void createCoordinateSystem();
-
-        //- Use turbine base class rotate method
-        using turbineALSource::rotate;
-
-        //- Rotate the turbine a specified angle about its axis
-        virtual void rotate(scalar radians);
+        //- Work to be done first time for calculateALData
+        virtual void initializeAL();
 
         //- Set up positions by calling findCells on all actuator line elements
         virtual void setupPositions(bool includeRing=true);
 
-        //- Work to be done first time for calculateALData
-        virtual void allocateAL();
-
         //- Calculate the force once velocity is sampled
         virtual void calculateForces();
 
+        virtual void addForce
+        (
+            fvMatrix<vector>& eqn,
+            volVectorField& forceField,
+            scalar scale,
+            bool compressible
+        );
 
 public:
 
     //- Runtime type information
-    TypeName("crossFlowTurbineALSource");
+    TypeName("actuatorModelBase");
 
 
     // Constructors
 
         //- Construct from components
-        crossFlowTurbineALSource
+        actuatorModelBase
         (
             const word& name,
             const word& modelType,
@@ -125,17 +151,13 @@ public:
 
 
     //- Destructor
-    virtual ~crossFlowTurbineALSource();
+    virtual ~actuatorModelBase();
 
 
     // Member Functions
-            virtual void addForce
-            (
-                fvMatrix<vector>& eqn,
-                volVectorField& forceField,
-                scalar scale,
-                bool compressible
-            );
+
+        // Access
+
 
         // Source term addition
 
@@ -164,11 +186,6 @@ public:
 
         // I-O
 
-            //- Read source dictionary
-            virtual bool read(const dictionary& dict);
-
-            //- Print dictionary values
-            virtual void printCoeffs() const;
 };
 
 

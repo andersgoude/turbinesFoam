@@ -368,15 +368,15 @@ void Foam::fv::axialFlowTurbineALSource::createHub()
     dict.add("type", "actuatorLineSource");
     dict.add("active", dict_.lookup("active"));
 
-    actuatorLineSource* hub = new actuatorLineSource
-    (
-        name_ + ".hub",
-        "actuatorLineSource",
-        dict,
-        mesh_
+    hub_.reset(
+        new actuatorLineSource
+        (
+            name_ + ".hub",
+            "actuatorLineSource",
+            dict,
+            mesh_
+        )
     );
-
-    hub_.set(hub);
 }
 
 
@@ -456,15 +456,15 @@ void Foam::fv::axialFlowTurbineALSource::createTower()
     dict.add("type", "actuatorLineSource");
     dict.add("active", dict_.lookup("active"));
 
-    actuatorLineSource* tower = new actuatorLineSource
-    (
-        name_ + ".tower",
-        "actuatorLineSource",
-        dict,
-        mesh_
+    tower_.reset(
+        new actuatorLineSource
+        (
+            name_ + ".tower",
+            "actuatorLineSource",
+            dict,
+            mesh_
+        )
     );
-
-    tower_.set(tower);
 }
 
 
@@ -602,17 +602,22 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     read(dict);
     createCoordinateSystem();
     createBlades();
+    label nActuatorLines = nBlades_;
     if (hasHub_)
     {
         createHub();
+        nActuatorLines++;
     }
     if (hasTower_)
     {
         createTower();
+        nActuatorLines++;
     }
+    hasNacelle_ = false; // createNacelle() is not implemented yet
     if (hasNacelle_)
     {
         createNacelle();
+        nActuatorLines++;
     }
     createOutputFile();
 
@@ -636,6 +641,26 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
         Info<< "axialFlowTurbineALSource created at time = " << time_.value()
             << endl;
     }
+
+    //setUp actuatorLines_ for simpler iterations over all lines
+    actuatorLines_.setSize(nActuatorLines);
+    label lineIndex = 0;
+    forAll(blades_, i)
+    {
+        actuatorLines_[lineIndex++] = &blades_[i];
+    }
+    if (hasHub_)
+    {
+        actuatorLines_[lineIndex++] = &hub_();
+    }
+    if (hasTower_)
+    {
+        actuatorLines_[lineIndex++] = &tower_();
+    }
+    if (hasNacelle_)
+    {
+        actuatorLines_[lineIndex++] = &nacelle_();
+    }
 }
 
 
@@ -643,7 +668,6 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
 
 Foam::fv::axialFlowTurbineALSource::~axialFlowTurbineALSource()
 {}
-
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
@@ -722,46 +746,59 @@ void Foam::fv::axialFlowTurbineALSource::yaw(scalar radians)
     rotateBladesAndHub(radians, verticalDirection_);
 }
 
-
-void Foam::fv::axialFlowTurbineALSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
+void Foam::fv::axialFlowTurbineALSource::setupPositions(bool includeRing)
 {
-    // Generate UInterp object to be used for all velocity interpolations
-    const volVectorField& Uin(eqn.psi());
-    interpolationCellPoint<vector> UInterp(Uin);
-    
-    // Rotate the turbine if time value has changed
+    // Rotate the turbine
+    // first step, it will be called two times
     if (time_.value() != lastRotationTime_)
     {
         rotate();
     }
 
-    // Zero out force vector and field
-    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-    force_ *= 0;
-
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+    forAll(actuatorLines_, i)
     {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+        actuatorLines_[i]->findCells(includeRing);
     }
+}
 
-    // Create local moment vector
-    vector moment(vector::zero);
+void Foam::fv::axialFlowTurbineALSource::allocateAL()
+{
+    forAll(actuatorLines_, i)
+    {
+        actuatorLines_[i]->allocateInfluenceCells(1, false);
+    }
+}
 
+void Foam::fv::axialFlowTurbineALSource::calculateForces()
+{
     if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
     {
         // Calculate end effects based on current velocity field
         calcEndEffects();
     }
+    forAll(actuatorLines_, i)
+    {
+        actuatorLines_[i]->calculateElementForces();
+    }
+}
+
+void Foam::fv::axialFlowTurbineALSource::addForce
+(
+    fvMatrix<vector>& eqn,
+    volVectorField& forceField,
+    scalar scale,
+    bool compressible
+)
+{
+    force_ *= 0;
+
+    // Create local moment vector
+    vector moment(vector::zero);
 
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addForce(eqn, UInterp, forceField_, fieldI, 1.0);
+        blades_[i].addForce(eqn, forceField_, scale, compressible);
         forceField_ += blades_[i].forceField();
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
@@ -771,7 +808,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasHub_)
     {
         // Add source for hub actuator line
-        hub_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
+        hub_->addForce(eqn, forceField_, scale, compressible);
         forceField_ += hub_->forceField();
         force_ += hub_->force();
         moment += hub_->moment(origin_);
@@ -780,7 +817,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
+        tower_->addForce(eqn, forceField_, scale, compressible);
         forceField_ += tower_->forceField();
         if (includeTowerDrag_)
         {
@@ -791,7 +828,7 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->addForce(eqn, UInterp, forceField_, fieldI, 1.0);
+        nacelle_->addForce(eqn, forceField_, scale, compressible);
         forceField_ += nacelle_->forceField();
         if (includeNacelleDrag_)
         {
@@ -819,6 +856,25 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     }
 }
 
+void Foam::fv::axialFlowTurbineALSource::addSup
+(
+    fvMatrix<vector>& eqn,
+    const label fieldI
+)
+{
+    calculateALData(fieldI);
+
+    // Zero out force vector and field
+    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+    
+    // Check dimensions of force field and correct if necessary
+    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
+    {
+        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
+    }
+    addForce(eqn, forceField_, 1.0, false);
+}
+
 
 void Foam::fv::axialFlowTurbineALSource::addSup
 (
@@ -827,96 +883,17 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     const label fieldI
 )
 {
-    // Generate UInterp object to be used for all velocity interpolations
-    const volVectorField& Uin(eqn.psi());
-    interpolationCellPoint<vector> UInterp(Uin);
-    
-    // Rotate the turbine if time value has changed
-    if (time_.value() != lastRotationTime_)
-    {
-        rotate();
-    }
+    calculateALData(fieldI);
 
     // Zero out force vector and field
     forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-    force_ *= 0;
 
     // Check dimensions of force field and correct if necessary
     if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
     {
         forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
     }
-
-    // Create local moment vector
-    vector moment(vector::zero);
-
-    if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
-    {
-        // Calculate end effects based on current velocity field
-        calcEndEffects();
-    }
-
-    // Add source for blade actuator lines
-    forAll(blades_, i)
-    {
-        blades_[i].addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
-        forceField_ += blades_[i].forceField();
-        force_ += blades_[i].force();
-        bladeMoments_[i] = blades_[i].moment(origin_);
-        moment += bladeMoments_[i];
-    }
-
-    if (hasHub_)
-    {
-        // Add source for hub actuator line
-        hub_->addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
-        forceField_ += hub_->forceField();
-        force_ += hub_->force();
-        moment += hub_->moment(origin_);
-    }
-
-    if (hasTower_)
-    {
-        // Add source for tower actuator line
-        tower_->addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
-        forceField_ += tower_->forceField();
-        if (includeTowerDrag_)
-        {
-            force_ += tower_->force();
-        }
-    }
-
-    if (hasNacelle_)
-    {
-        // Add source for tower actuator line
-        nacelle_->addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
-        forceField_ += nacelle_->forceField();
-        if (includeNacelleDrag_)
-        {
-            force_ += nacelle_->force();
-        }
-    }
-
-    // Torque is the projection of the moment from all blades on the axis
-    torque_ = moment & axis_;
-
-    scalar rhoRef;
-    coeffs_.lookup("rhoRef") >> rhoRef;
-    torqueCoefficient_ = torque_/(0.5*rhoRef*frontalArea_*rotorRadius_
-                       * magSqr(freeStreamVelocity_));
-    powerCoefficient_ = torqueCoefficient_*tipSpeedRatio_;
-    dragCoefficient_ = force_ & freeStreamDirection_
-                     / (0.5*rhoRef*frontalArea_*magSqr(freeStreamVelocity_));
-
-    // Print performance to terminal
-    printPerf();
-
-    // Write performance data -- note this will write multiples if there are
-    // multiple PIMPLE loops
-    if (Pstream::master())
-    {
-        writePerf();
-    }
+    addForce(eqn, forceField_, 1.0, true);
 }
 
 
@@ -926,40 +903,12 @@ void Foam::fv::axialFlowTurbineALSource::addSup
     const label fieldI
 )
 {
-    // Rotate the turbine if time value has changed
-    if (time_.value() != lastRotationTime_)
-    {
-        rotate();
-    }
-
-    if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
-    {
-        // Calculate end effects based on current velocity field
-        calcEndEffects();
-    }
+    calculateALData(fieldI);
 
     // Add scalar source term from blades
-    forAll(blades_, i)
+    forAll(actuatorLines_, i)
     {
-        blades_[i].addSup(eqn, fieldI);
-    }
-
-    if (hasHub_)
-    {
-        // Add source for hub actuator line
-        hub_->addSup(eqn, fieldI);
-    }
-
-    if (hasTower_)
-    {
-        // Add source for tower actuator line
-        tower_->addSup(eqn, fieldI);
-    }
-
-    if (hasNacelle_)
-    {
-        // Add source for nacelle actuator line
-        nacelle_->addSup(eqn, fieldI);
+        actuatorLines_[i]->addSup(eqn, fieldI);
     }
 }
 

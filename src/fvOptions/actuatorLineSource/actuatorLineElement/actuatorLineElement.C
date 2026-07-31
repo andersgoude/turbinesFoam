@@ -48,19 +48,20 @@ namespace fv
 void Foam::fv::actuatorLineElement::read()
 {
     // Parse dictionary
-    dict_.lookup("position") >> position_;
+    dict_.lookup("position") >> position_[0];
     dict_.lookup("chordLength") >> chordLength_;
-    dict_.lookup("chordDirection") >> chordDirection_;
-    dict_.lookup("chordRefDirection") >> chordRefDirection_;
+    dict_.lookup("chordDirection") >> chordDirection_[0];
+    dict_.lookup("chordRefDirection") >> chordRefDirection_[0];
     dict_.lookup("chordMount") >> chordMount_;
     dict_.lookup("spanLength") >> spanLength_;
-    dict_.lookup("spanDirection") >> spanDirection_;
+    dict_.lookup("spanDirection") >> spanDirection_[0];
     dict_.lookup("freeStreamVelocity") >> freeStreamVelocity_;
     freeStreamDirection_ = freeStreamVelocity_/mag(freeStreamVelocity_);
     dict_.lookup("rootDistance") >> rootDistance_;
     dict_.lookup("cone") >> cone_;
     dict_.lookup("velocitySampleRadius") >> velocitySampleRadius_;
     dict_.lookup("nVelocitySamples") >> nVelocitySamples_;
+
 
     // Create dynamic stall model if found
     if (dict_.found("dynamicStall"))
@@ -107,11 +108,11 @@ void Foam::fv::actuatorLineElement::read()
     if (debug)
     {
         Info<< "actuatorLineElement properties:" << endl;
-        Info<< "Position: " << position_ << endl;
+        Info<< "Position: " << position_[azimuthIndex_] << endl;
         Info<< "chordLength: " << chordLength_ << endl;
-        Info<< "chordDirection: " << chordDirection_ << endl;
+        Info<< "chordDirection: " << chordDirection_[azimuthIndex_] << endl;
         Info<< "spanLength: " << spanLength_ << endl;
-        Info<< "spanDirection: " << spanDirection_ << endl;
+        Info<< "spanDirection: " << spanDirection_[azimuthIndex_] << endl;
         Info<< "cone: " << cone_ << endl;
         Info<< "writePerf: " << writePerf_ << endl;
         Info<< "writePerfEnd: " << writePerfEnd_ << endl;
@@ -162,7 +163,7 @@ void Foam::fv::actuatorLineElement::rotateVector
 }
 
 
-Foam::label Foam::fv::actuatorLineElement::findCell
+/*Foam::label Foam::fv::actuatorLineElement::findCell
 (
     const point& location
 )
@@ -171,16 +172,16 @@ Foam::label Foam::fv::actuatorLineElement::findCell
 
     // Fastest path: Same point as last time
     bool reuse =
-        previousLocationValid_
-        && magSqr(location - previousLocation_) < SMALL;
+        previousLocationValid_[azimuthIndex_]
+        && magSqr(location - previousLocation_[azimuthIndex_]) < SMALL;
 
     reduce(reuse, andOp<bool>());
     if (reuse)
     {
         return
         (
-            Pstream::myProcNo() == previousProcI_
-          ? previousCellI_
+            Pstream::myProcNo() == previousCenterProcI_[azimuthIndex_]
+          ? previousCenterCellI_[azimuthIndex_]
           : -1
         );
     }
@@ -192,8 +193,10 @@ Foam::label Foam::fv::actuatorLineElement::findCell
         {
             if (ringProcI_[azimuthIndex_][activeRingIndex_] != -2) // first use
             {
-                previousProcI_ = ringProcI_[azimuthIndex_][activeRingIndex_];
-                previousCellI_ = ringCellI_[azimuthIndex_][activeRingIndex_];
+                previousCenterProcI_[azimuthIndex_] =
+                    ringProcI_[azimuthIndex_][activeRingIndex_];
+                previousCenterCellI_[azimuthIndex_] =
+                    ringCellI_[azimuthIndex_][activeRingIndex_];
             }
             else
             {
@@ -205,8 +208,10 @@ Foam::label Foam::fv::actuatorLineElement::findCell
         {
             if (centerCellI_[azimuthIndex_] != -2)
             {
-                previousProcI_ = centerProcI_[azimuthIndex_];
-                previousCellI_ = centerCellI_[azimuthIndex_];
+                previousCenterProcI_[azimuthIndex_] =
+                    centerProcI_[azimuthIndex_];
+                previousCenterCellI_[azimuthIndex_] =
+                    centerCellI_[azimuthIndex_];
             }
             else
             {
@@ -220,21 +225,21 @@ Foam::label Foam::fv::actuatorLineElement::findCell
     bool cacheMiss = false;
     if
     (
-        previousProcI_ == Pstream::myProcNo()
-            && previousCellI_ >= 0
-            && previousCellI_ < mesh_.nCells()
+        previousCenterProcI_[azimuthIndex_] == Pstream::myProcNo()
+            && previousCenterCellI_[azimuthIndex_] >= 0
+            && previousCenterCellI_[azimuthIndex_] < mesh_.nCells()
     )
     {
         // Check cached cell
-        if (mesh_.pointInCell(location, previousCellI_))
+        if (mesh_.pointInCell(location, previousCenterCellI_[azimuthIndex_]))
         {
-            localCell = previousCellI_;
+            localCell = previousCenterCellI_[azimuthIndex_];
         }
         else
         {
             // If not previous cell, check neighboring cells
             const labelList& nbrs =
-                mesh_.cellCells()[previousCellI_];
+                mesh_.cellCells()[previousCenterCellI_[azimuthIndex_]];
 
             forAll(nbrs, nbrI)
             {
@@ -274,47 +279,54 @@ Foam::label Foam::fv::actuatorLineElement::findCell
     // Update cache
     if (localCell >= 0)
     {
-        previousCellI_ = localCell;
-        previousProcI_ = Pstream::myProcNo();
-        previousLocation_ = location;
-        previousLocationValid_ = true;
+        previousCenterCellI_[azimuthIndex_] = localCell;
+        previousCenterCellI_[azimuthIndex_] = Pstream::myProcNo();
+        previousLocation_[azimuthIndex_] = location;
+        previousLocationValid_[azimuthIndex_] = true;
         if (centerCellI_.size() > 0)
         {
             if (cacheMiss)
             {
                 if (activeRingIndex_ >= 0) // ring sampling active
                 {
-                   ringProcI_[azimuthIndex_][activeRingIndex_] = previousProcI_;
-                   ringCellI_[azimuthIndex_][activeRingIndex_] = previousCellI_;
+                    ringProcI_[azimuthIndex_][activeRingIndex_] =
+                        previousCenterCellI_[azimuthIndex_];
+                    ringCellI_[azimuthIndex_][activeRingIndex_] =
+                        previousCenterCellI_[azimuthIndex_];
                 }
                 else
                 {
-                    centerProcI_[azimuthIndex_] = previousProcI_;
-                    centerCellI_[azimuthIndex_] = previousCellI_;
+                    centerProcI_[azimuthIndex_] =
+                        previousCenterCellI_[azimuthIndex_];
+                    centerCellI_[azimuthIndex_] =
+                        previousCenterCellI_[azimuthIndex_];
                 }
             }
         }
     }
     else
     {
-        previousCellI_ = -1;
-        previousProcI_ = -1;
-        previousLocationValid_ = false;
+        previousCenterCellI_[azimuthIndex_] = -1;
+        previousCenterCellI_[azimuthIndex_] = -1;
+        previousLocationValid_[azimuthIndex_] = false;
     }
 
     return localCell;
-}
+}*/
 
 
 void Foam::fv::actuatorLineElement::lookupCoefficients()
 {
-    liftCoefficient_ = profileData_.liftCoefficient(angleOfAttack_);
-    dragCoefficient_ = profileData_.dragCoefficient(angleOfAttack_);
-    momentCoefficient_ = profileData_.momentCoefficient(angleOfAttack_);
+    liftCoefficient_[azimuthIndex_] =
+        profileData_.liftCoefficient(angleOfAttack_);
+    dragCoefficient_[azimuthIndex_] =
+        profileData_.dragCoefficient(angleOfAttack_);
+    momentCoefficient_[azimuthIndex_] =
+        profileData_.momentCoefficient(angleOfAttack_);
 }
 
 
-Foam::scalar Foam::fv::actuatorLineElement::calcProjectionEpsilon()
+void Foam::fv::actuatorLineElement::calcProjectionEpsilon()
 {
     // Lookup Gaussian coeffs from profileData dict if present
     dictionary GaussianCoeffs = profileData_.dict().subOrEmptyDict
@@ -329,64 +341,51 @@ Foam::scalar Foam::fv::actuatorLineElement::calcProjectionEpsilon()
     scalar epsilonLift = chordFactor*chordLength_;
 
     // Epsilon based on drag/momentum thickness
-    scalar epsilonDrag = dragFactor*dragCoefficient_*chordLength_/2.0;
+    scalar epsilonDrag =
+        dragFactor*dragCoefficient_[azimuthIndex_]*chordLength_/2.0;
 
     // Threshold is based on lift or drag, whichever is larger
     scalar epsilonThreshold = Foam::max(epsilonLift, epsilonDrag);
 
-    scalar epsilon = VGREAT;
+    epsilon_[azimuthIndex_] = VGREAT;
     scalar epsilonMesh = VGREAT;
     const scalarField& V = mesh_.V();
-    label posCellI = findCell(position_);
 
-    if (posCellI >= 0)
+    if (centerCellI_[azimuthIndex_] >= 0)
     {
         // Projection width based on local cell size (from Troldborg (2008))
-        epsilonMesh = 2.0*Foam::cbrt(V[posCellI]);
+        epsilonMesh = 2.0*Foam::cbrt(V[centerCellI_[azimuthIndex_]]);
         epsilonMesh *= meshFactor; // Cell could have non-unity aspect ratio
 
         if (epsilonMesh > epsilonThreshold)
         {
-            epsilon = epsilonMesh;
+            epsilon_[azimuthIndex_] = epsilonMesh;
         }
         else
         {
-            epsilon = epsilonThreshold;
+            epsilon_[azimuthIndex_] = epsilonThreshold;
         }
-    }
-
-    // Reduce epsilon over all processors
-    reduce(epsilon, minOp<scalar>());
-
-    // If epsilon is not reduced, position is not in the mesh
-    if (not (epsilon < VGREAT))
-    {
-        // Raise fatal error since mesh size cannot be detected
-        FatalErrorIn("void actuatorLineElement::applyForceField()")
-            << "Position of " << name_ << " Position: " << position_
-            << " not found in mesh" << abort(FatalError);
     }
 
     if (debug)
     {
-        reduce(epsilonMesh, minOp<scalar>());
+        //reduce(epsilonMesh, minOp<scalar>());
         word epsilonMethod;
-        if (epsilon == epsilonLift)
+        if (epsilon_[azimuthIndex_] == epsilonLift)
         {
             epsilonMethod = "lift-based";
         }
-        else if (epsilon == epsilonDrag)
+        else if (epsilon_[azimuthIndex_] == epsilonDrag)
         {
             epsilonMethod = "drag-based";
         }
-        else if (epsilon == epsilonMesh)
+        else if (epsilon_[azimuthIndex_] == epsilonMesh)
         {
             epsilonMethod = "mesh-based";
         }
-        Info<< "    epsilon (" << epsilonMethod << "): " << epsilon << endl;
+        Info<< "    epsilon (" << epsilonMethod
+            << "): " << epsilon_[azimuthIndex_] << endl;
     }
-
-    return epsilon;
 }
 
 
@@ -404,13 +403,16 @@ void Foam::fv::actuatorLineElement::correctFlowCurvature
     if (flowCurvatureModelName_ == "Goude")
     {
         angleOfAttackRad +=
-            omega_*chordLength_/(2*mag(relativeVelocity_))*cos(cone_);
+            omega_*chordLength_/
+            (2*mag(relativeVelocity_[azimuthIndex_]))*cos(cone_);
     }
     else if (flowCurvatureModelName_ == "MandalBurton")
     {
         // Calculate relative velocity at leading and trailing edge
-        vector relativeVelocityLE = inflowVelocity_ - velocityLE_;
-        vector relativeVelocityTE = inflowVelocity_ - velocityTE_;
+        vector relativeVelocityLE =
+            inflowVelocity_[azimuthIndex_] - velocityLE_;
+        vector relativeVelocityTE =
+            inflowVelocity_[azimuthIndex_] - velocityTE_;
 
         // Calculate angle of attack at leading and trailing edge
         scalar alphaLE = asin((planformNormal_ & relativeVelocityLE)
@@ -433,21 +435,9 @@ void Foam::fv::actuatorLineElement::correctFlowCurvature
 }
 
 
-void Foam::fv::actuatorLineElement::multiplyForceRho
-(
-    const volScalarField& rho
-)
+void Foam::fv::actuatorLineElement::multiplyForceRho()
 {
-    // Lookup local density
-    label cellI = findCell(position_);
-    scalar localRho = VGREAT;
-    if (cellI >= 0)
-    {
-        localRho = rho[cellI];
-    }
-
-    reduce(localRho, minOp<scalar>());
-    forceVector_ *= localRho;
+    forceVector_[azimuthIndex_] *= localRho_[azimuthIndex_];
 }
 
 
@@ -458,26 +448,30 @@ void Foam::fv::actuatorLineElement::applyForceField
 )
 {
     // Calculate projection width
-    scalar epsilon = calcProjectionEpsilon();
-    scalar projectionRadius = (epsilon*Foam::sqrt(Foam::log(1.0/0.001)));
+    //scalar epsilon[azimuthIndex_] = calcProjectionEpsilon();
+
+    scalar projectionRadius =
+        (epsilon_[azimuthIndex_]*Foam::sqrt(Foam::log(1.0/0.001)));
 
     // Apply force to the cells within the element's sphere of influence
     scalar sphereRadius = chordLength_ + projectionRadius;
     scalar sphereRadiusSqr = sphereRadius*sphereRadius;
-    scalar invepsilonSqr = 1.0/(epsilon*epsilon);
-    scalar internalFactor = scale/(Foam::pow(epsilon, 3)
+    scalar invepsilonSqr =
+        1.0/(epsilon_[azimuthIndex_]*epsilon_[azimuthIndex_]);
+    scalar internalFactor = scale/(Foam::pow(epsilon_[azimuthIndex_], 3)
                           * Foam::pow(Foam::constant::mathematical::pi, 1.5));
+
     // forceField is opposite forceVector
-    const vector scaledForce = -forceVector_*internalFactor;
+    const vector scaledForce = -forceVector_[azimuthIndex_]*internalFactor;
 
     const vectorField& C = mesh_.C();
 
     vectorField& force =
         forceField.primitiveFieldRef();
 
-    const scalar px = position_.x();
-    const scalar py = position_.y();
-    const scalar pz = position_.z();
+    const scalar px = position_[azimuthIndex_].x();
+    const scalar py = position_[azimuthIndex_].y();
+    const scalar pz = position_[azimuthIndex_].z();
 
     if (activePositionsPtr_ != nullptr)
     {
@@ -557,24 +551,91 @@ void Foam::fv::actuatorLineElement::allocateInfluenceCells
     {
         influenceCells_.setSize(count);
     }
-    centerCellI_.setSize(count, -2);
-    centerProcI_.setSize(count, -2);
+    centerCellI_.setSize(count);
+    centerCellI_ = -1;
+
+    centerProcI_.setSize(count);
+    centerProcI_ = -1;
+
+    chordDirection_.setSize(count);
+    chordDirection_ = chordDirection_[0];
+
+    spanDirection_.setSize(count);
+    spanDirection_ = spanDirection_[0];
+
+    chordRefDirection_.setSize(count);
+    chordRefDirection_ = chordRefDirection_[0];
+
+    localRho_.setSize(count);
+    localRho_ = localRho_[0];
+
+    position_.setSize(count);
+    position_ = position_[0];
+
+    previousLocation_.setSize(count);
+    previousLocation_ = previousLocation_[0];
+
+    velocity_.setSize(count);
+    velocity_ = velocity_[0];
+
+    forceVector_.setSize(count);
+    forceVector_ = forceVector_[0];
+
+    inflowVelocity_.setSize(count);
+    inflowVelocity_ = inflowVelocity_[0];
+
+    epsilon_.setSize(count);
+    epsilon_ = chordLength_;
+
+    relativeVelocity_.setSize(count);
+    relativeVelocity_ = relativeVelocity_[0];
+
+    liftCoefficient_.setSize(count);
+    liftCoefficient_ = liftCoefficient_[0];
+
+    dragCoefficient_.setSize(count);
+    dragCoefficient_ = dragCoefficient_[0];
+
+    momentCoefficient_.setSize(count);
+    momentCoefficient_ = momentCoefficient_[0];
+
     if (velocitySampleRadius_ > 0.0)
     {
         ringCellI_.setSize(count);
         ringProcI_.setSize(count);
+        velocitiesRing_.setSize(count);
+        previousRingLocation_.setSize(count);
+        previousRingLocationValid_.setSize(count);
         forAll(ringCellI_, azimuthI)
         {
             ringCellI_[azimuthI].setSize
             (
                 nVelocitySamples_,
-                -2
+                -1
             );
 
             ringProcI_[azimuthI].setSize
             (
                 nVelocitySamples_,
-                -2
+                -1
+            );
+
+            velocitiesRing_[azimuthI].setSize
+            (
+                nVelocitySamples_,
+                vector::zero
+            );
+
+            previousRingLocation_[azimuthI].setSize
+            (
+                nVelocitySamples_,
+                vector::zero
+            );
+
+            previousRingLocationValid_[azimuthI].setSize
+            (
+                nVelocitySamples_,
+                false
             );
         }
     }
@@ -588,10 +649,8 @@ void Foam::fv::actuatorLineElement::constructInfluenceCellList
     label& nActive
 )
 {
-    // Calculate projection width
-    dragCoefficient_ = 4; // Should realistically not be larger than this
-    scalar epsilon = calcProjectionEpsilon();
-    scalar projectionRadius = (epsilon*Foam::sqrt(Foam::log(1.0/0.001)));
+    scalar projectionRadius
+        = (epsilon_[azimuthIndex_]*Foam::sqrt(Foam::log(1.0/0.001)));
 
     // Apply force to the cells within the element's sphere of influence
     scalar sphereRadius = chordLength_ + projectionRadius;
@@ -603,7 +662,7 @@ void Foam::fv::actuatorLineElement::constructInfluenceCellList
 
     forAll(C, cellI)
     {
-        scalar dis = magSqr(C[cellI] - position_);
+        scalar dis = magSqr(C[cellI] - position_[azimuthIndex_]);
         if (dis <= sphereRadiusSqr)
         {
             // Grow buffer if needed
@@ -649,40 +708,102 @@ void Foam::fv::actuatorLineElement::setAzimuthIndex
     }
 }
 
-void Foam::fv::actuatorLineElement::calculateInflowVelocity
+label Foam::fv::actuatorLineElement::findNearbyCell
 (
-    const interpolationCellPoint<vector>& UInterp
+    const point &location,
+    const label previousCell
 )
 {
-    // Find local flow velocity by interpolating to element location
-    vector inflowVelocityPoint = position_;
-    
-    vector localVelocitySum = vector::zero;
-    label localNSamples = 0;
-    
-    // If the flow only is sampled in the center
-    if (velocitySampleRadius_ <= 0.0)
+    label localCell = -1;
+
+    if
+    (
+        previousCenterProcI_[azimuthIndex_] == Pstream::myProcNo()
+            && previousCenterCellI_[azimuthIndex_] >= 0
+            && previousCenterCellI_[azimuthIndex_] < mesh_.nCells()
+    )
     {
-        label inflowCellI = findCell(inflowVelocityPoint);
-        if (inflowCellI >= 0)
+        // Check cached cell
+        if (mesh_.pointInCell(location, previousCenterProcI_[azimuthIndex_]))
         {
-            localVelocitySum = UInterp.interpolate
-            (
-                inflowVelocityPoint,
-                inflowCellI
-            );
-            localNSamples = 1;
+            localCell = previousCenterProcI_[azimuthIndex_];
+        }
+        else
+        {
+            // If not previous cell, check neighboring cells
+            const labelList& nbrs =
+                mesh_.cellCells()[previousCenterProcI_[azimuthIndex_]];
+
+            forAll(nbrs, nbrI)
+            {
+                label testCell = nbrs[nbrI];
+
+                if
+                (
+                    testCell >= 0
+                    && testCell < mesh_.nCells()
+                    && mesh_.pointInCell(location, testCell)
+                )
+                {
+                    localCell = testCell;
+                    break;
+                }
+            }
         }
     }
-    // If the flow is sampled by using a circle around position_
+    return localCell;
+}
+
+void Foam::fv::actuatorLineElement::findCells(bool includeRing)
+{
+    // Find local flow velocity by interpolating to element location
+    vector inflowVelocityPoint = position_[azimuthIndex_];
+
+    if (centerProcI_[azimuthIndex_] == Pstream::myProcNo()
+                && centerCellI_[azimuthIndex_] >= 0
+                && centerCellI_[azimuthIndex_] < mesh_.nCells())
+    {
+        if
+        (
+            magSqr
+            (
+                position_[azimuthIndex_] - previousLocation_[azimuthIndex_]
+            )
+            > SMALL
+        )
+        {
+            // if we cannot reuse the previous value directly
+            centerCellI_[azimuthIndex_] =
+                findNearbyCell
+                (
+                    position_[azimuthIndex_],
+                    centerCellI_[azimuthIndex_]
+                );
+            if (centerCellI_[azimuthIndex_] < 0) // if lookup failed
+            {
+                centerProcI_[azimuthIndex_] = -1;
+            }
+        }
+    }
     else
     {
+        centerCellI_[azimuthIndex_] = -1;
+        centerProcI_[azimuthIndex_] = -1;
+    }
+    previousLocation_[azimuthIndex_] = position_[azimuthIndex_];
+
+    // If the flow is sampled by using a circle around position_
+    if (includeRing && velocitySampleRadius_ > 0.0)
+    {
         // Circle radius should be normalized with epsilon
-        scalar sampleRadius = calcProjectionEpsilon()*velocitySampleRadius_;
+        // Use old value of epsilon for speed
+
+        scalar sampleRadius = epsilon_[azimuthIndex_]*velocitySampleRadius_;
 
         // Unit vector in chordwise direction
-        vector chordNormal = chordDirection_ / mag(chordDirection_);
-        
+        vector chordNormal = chordDirection_[azimuthIndex_] /
+                                mag(chordDirection_[azimuthIndex_]);
+
         // Calculate mean value over all circle points
         for (label point = 0; point < nVelocitySamples_; point++)
         {
@@ -695,38 +816,86 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity
                                  chordDist * chordNormal +
                                  normalDist * planformNormal_;
 
-            // Sample the velocity
-            activeRingIndex_ = point; // actuator disc, use ring cache
-            label sampleCellI = findCell(samplePoint);
-            if (sampleCellI >= 0)
+
+            if (ringProcI_[azimuthIndex_][point] == Pstream::myProcNo()
+                && ringCellI_[azimuthIndex_][point] >= 0
+                && ringCellI_[azimuthIndex_][point] < mesh_.nCells())
             {
-                localVelocitySum += UInterp.interpolate
+                if
                 (
-                    samplePoint,
-                    sampleCellI
-                );
-                localNSamples++;
+                    magSqr
+                    (
+                        samplePoint -
+                            previousRingLocation_[azimuthIndex_][point]
+                    )
+                    > SMALL
+                )
+                {
+                    ringCellI_[azimuthIndex_][point] =
+                        findNearbyCell
+                        (
+                            samplePoint,
+                            ringCellI_[azimuthIndex_][point]
+                        );
+
+                    // if lookup failed
+                    if (ringCellI_[azimuthIndex_][point] < 0)
+                    {
+                        ringProcI_[azimuthIndex_][point] = -1;
+                    }
+                }
             }
+            else
+            {
+                ringCellI_[azimuthIndex_][point] = -1;
+                ringProcI_[azimuthIndex_][point] = -1;
+            }
+            previousRingLocation_[azimuthIndex_][point] = samplePoint;
         }
-        // no longer doing ring sampling, do not use this cache
-        activeRingIndex_ = -1;
     }
+}
+
+void Foam::fv::actuatorLineElement::calculateInflowVelocity()
+{
+    vector localVelocitySum = vector::zero;
+    label localNSamples = 0;
     
-    // Reduce inflow velocity over all processors
-    reduce(localVelocitySum, sumOp<vector>());
-    reduce(localNSamples, sumOp<label>());
-
-    // Set inflow Velocity as the mean value
-    inflowVelocity_ = 1.0 / localNSamples * localVelocitySum;
-
-    // If inflow velocity is not detected, position is not in the mesh
-    if (localNSamples == 0)
+    // Check that the center cell is valid, if not, position is not in the mesh
+    /*if (centerCellI_[azimuthIndex_] < 0)
     {
         // Raise fatal error since inflow velocity cannot be detected
         FatalErrorIn("void actuatorLineElement::calculateForce()")
             << "Inflow velocity point for " << name_ << " Position: "
-            << position_ << " not found in mesh"
+            << position_[azimuthIndex_] << " not found in mesh"
             << abort(FatalError);
+    }*/
+    // If the flow is sampled by using a circle around position_, then
+    // overwrite the inflow velocity with the mean value over all circle points
+    if (velocitySampleRadius_ > 0.0)
+    {
+        // Calculate mean value over all circle points
+        for (label point = 0; point < nVelocitySamples_; point++)
+        {
+            activeRingIndex_ = point; // actuator disc, use ring cache
+            label sampleCellI = ringCellI_[azimuthIndex_][point];
+            if (sampleCellI >= 0)
+            {
+                localVelocitySum += velocitiesRing_[azimuthIndex_][point];
+                localNSamples++;
+            }
+        }
+        // Set inflow Velocity as the mean value
+        inflowVelocity_ = 1.0 / localNSamples * localVelocitySum;
+
+        // If inflow velocity is not detected, position is not in the mesh
+        /*if (localNSamples == 0)
+        {
+            // Raise fatal error since inflow velocity cannot be detected
+            FatalErrorIn("void actuatorLineElement::calculateForce()")
+                << "Inflow velocity point for " << name_ << " Position: "
+                << position_ << " not found in mesh"
+                << abort(FatalError);
+        }*/
     }
 }
 
@@ -768,15 +937,21 @@ void Foam::fv::actuatorLineElement::writePerf()
 
     // write time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,alpha_geom_deg,cl,cd,
     // fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n
-    stringBuffer_<< time << "," << rootDistance_ << "," << position_.x() << ","
-                << position_.y() << "," << position_.z() << ","
-                << mag(relativeVelocity_) << "," << Re_ << "," << angleOfAttack_
-                << "," << angleOfAttackGeom_ << "," << liftCoefficient_ << ","
-                << dragCoefficient_ << "," << forceVector_.x() << ","
-                << forceVector_.y() << "," << forceVector_.z() << ","
-                << endEffectFactor_ << "," << tangentialRefCoefficient() << ","
-                << normalRefCoefficient() << "," << tangentialRefForce() << ","
-                << normalRefForce() << std::endl;
+    stringBuffer_<< time << "," << rootDistance_ << ","
+            << position_[azimuthIndex_].x() << ","
+            << position_[azimuthIndex_].y() << ","
+            << position_[azimuthIndex_].z() << ","
+            << mag(relativeVelocity_[azimuthIndex_])
+            << "," << Re_ << "," << angleOfAttack_
+            << "," << angleOfAttackGeom_ << ","
+            << liftCoefficient_[azimuthIndex_] << ","
+            << dragCoefficient_[azimuthIndex_] << ","
+            << forceVector_[azimuthIndex_].x()*localRho_[azimuthIndex_] << ","
+            << forceVector_[azimuthIndex_].y()*localRho_[azimuthIndex_] << ","
+            << forceVector_[azimuthIndex_].z()*localRho_[azimuthIndex_] << ","
+            << endEffectFactor_ << "," << tangentialRefCoefficient() << ","
+            << normalRefCoefficient() << "," << tangentialRefForce() << ","
+            << normalRefForce() << std::endl;
 
     // only write to file with writePerf_, writePerfEnd_ writes in destructor
     if (writePerf_ && outputFile_.is_open())
@@ -801,25 +976,34 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     name_(name),
     mesh_(mesh),
     meshBoundBox_(mesh_.points(), false),
+    chordDirection_(1, vector::zero),
+    spanDirection_(1, vector::zero),
     planformNormal_(vector::zero),
-    velocity_(vector::zero),
-    forceVector_(vector::zero),
-    previousCellI_(-1),
-    previousProcI_(-1),
-    previousLocation_(point::zero),
-    previousLocationValid_(false),
-    centerCellI_(0),
-    centerProcI_(0),
+    chordRefDirection_(1, vector::zero),
+    position_(1, vector::zero),
+    velocity_(1, vector::zero),
+    freeStreamVelocity_(vector::zero),
+    forceVector_(1, vector::zero),
+    localRho_(1, 1.0),
+    inflowVelocity_(1, vector::zero),
+    epsilon_(1, 0.0),
+    previousCenterCellI_(1, -1),
+    previousCenterProcI_(1, -1),
+    previousLocation_(1, point::zero),
+    previousRingLocation_(0),
+    previousLocationValid_(1, false),
+    centerCellI_(1, -1),
+    centerProcI_(1, -1),
     ringCellI_(0),
     ringProcI_(0),
     activeRingIndex_(-1),
-    relativeVelocity_(vector::zero),
+    relativeVelocity_(1, vector::zero),
     relativeVelocityGeom_(vector::zero),
     angleOfAttack_(0.0),
     angleOfAttackGeom_(0.0),
-    liftCoefficient_(0.0),
-    dragCoefficient_(0.0),
-    momentCoefficient_(0.0),
+    liftCoefficient_(1, 0.0),
+    dragCoefficient_(1, 0.0),
+    momentCoefficient_(1, 0.0),
     profileName_(dict.lookup("profileName")),
     profileData_(profileName_, dict.subDict("profileData"), debug),
     dynamicStallActive_(false),
@@ -897,19 +1081,19 @@ const Foam::scalar& Foam::fv::actuatorLineElement::spanLength()
 
 const Foam::vector& Foam::fv::actuatorLineElement::position()
 {
-    return position_;
+    return position_[azimuthIndex_];
 }
 
 
 const Foam::vector& Foam::fv::actuatorLineElement::velocity()
 {
-    return velocity_;
+    return velocity_[azimuthIndex_];
 }
 
 
 const Foam::vector& Foam::fv::actuatorLineElement::relativeVelocity()
 {
-    return relativeVelocity_;
+    return relativeVelocity_[azimuthIndex_];
 }
 
 
@@ -933,19 +1117,19 @@ const Foam::scalar& Foam::fv::actuatorLineElement::angleOfAttackGeom()
 
 const Foam::scalar& Foam::fv::actuatorLineElement::liftCoefficient()
 {
-    return liftCoefficient_;
+    return liftCoefficient_[azimuthIndex_];
 }
 
 
 const Foam::scalar& Foam::fv::actuatorLineElement::dragCoefficient()
 {
-    return dragCoefficient_;
+    return dragCoefficient_[azimuthIndex_];
 }
 
 
 const Foam::scalar& Foam::fv::actuatorLineElement::momentCoefficient()
 {
-    return momentCoefficient_;
+    return momentCoefficient_[azimuthIndex_];
 }
 
 
@@ -953,8 +1137,8 @@ Foam::scalar Foam::fv::actuatorLineElement::tangentialRefCoefficient()
 {
     return profileData_.convertToCRT
     (
-        liftCoefficient_,
-        dragCoefficient_,
+        liftCoefficient_[azimuthIndex_],
+        dragCoefficient_[azimuthIndex_],
         inflowRefAngle()
     );
 }
@@ -963,7 +1147,7 @@ Foam::scalar Foam::fv::actuatorLineElement::tangentialRefCoefficient()
 Foam::scalar Foam::fv::actuatorLineElement::tangentialRefForce()
 {
     return 0.5 * chordLength_ * tangentialRefCoefficient()
-        * magSqr(relativeVelocity_);
+        * magSqr(relativeVelocity_[azimuthIndex_]);
 }
 
 
@@ -971,8 +1155,8 @@ Foam::scalar Foam::fv::actuatorLineElement::normalRefCoefficient()
 {
     return profileData_.convertToCRN
     (
-        liftCoefficient_,
-        dragCoefficient_,
+        liftCoefficient_[azimuthIndex_],
+        dragCoefficient_[azimuthIndex_],
         inflowRefAngle()
     );
 }
@@ -981,7 +1165,7 @@ Foam::scalar Foam::fv::actuatorLineElement::normalRefCoefficient()
 Foam::scalar Foam::fv::actuatorLineElement::normalRefForce()
 {
     return 0.5 * chordLength_ * normalRefCoefficient()
-        * magSqr(relativeVelocity_);
+        * magSqr(relativeVelocity_[azimuthIndex_]);
 }
 
 
@@ -989,8 +1173,9 @@ Foam::scalar Foam::fv::actuatorLineElement::inflowRefAngle()
 {
     // Calculate inflow velocity angle in degrees (AFTAL Phi)
     scalar arg =
-        (-relativeVelocity_ & chordRefDirection_)
-        / (mag(relativeVelocity_) * mag(chordRefDirection_));
+        (-relativeVelocity_[azimuthIndex_] & chordRefDirection_[azimuthIndex_])
+        / (mag(relativeVelocity_[azimuthIndex_])
+        * mag(chordRefDirection_[azimuthIndex_]));
     scalar inflowVelAngleRad =
         acos(sign(arg)*min(Foam::scalar(1.0), mag(arg)));
     return radToDeg(inflowVelAngleRad);
@@ -1003,49 +1188,49 @@ const Foam::scalar& Foam::fv::actuatorLineElement::rootDistance()
 }
 
 
-void Foam::fv::actuatorLineElement::calculateForce
-(
-    const interpolationCellPoint<vector>& UInterp
-)
+void Foam::fv::actuatorLineElement::calculateForce()
 {
     scalar pi = Foam::constant::mathematical::pi;
 
     // Calculate vector normal to chord--span plane
-    planformNormal_ = -chordDirection_ ^ spanDirection_;
+    planformNormal_ =
+        -chordDirection_[azimuthIndex_] ^ spanDirection_[azimuthIndex_];
     planformNormal_ /= mag(planformNormal_);
 
     if (debug)
     {
         Info<< "Calculating force contribution from actuatorLineElement "
             << name_ << endl;
-        Info<< "    position: " << position_ << endl;
-        Info<< "    chordDirection: " << chordDirection_ << endl;
-        Info<< "    spanDirection: " << spanDirection_ << endl;
-        Info<< "    elementVelocity: " << velocity_ << endl;
+        Info<< "    position: " << position_[azimuthIndex_] << endl;
+        Info<< "    chordDirection: " << chordDirection_[azimuthIndex_] << endl;
+        Info<< "    spanDirection: " << spanDirection_[azimuthIndex_] << endl;
+        Info<< "    elementVelocity: " << velocity_[azimuthIndex_] << endl;
         Info<< "    planformNormal: " << planformNormal_ << endl;
     }
 
     // Find local flow velocity by interpolating to element location
-    calculateInflowVelocity(UInterp);
+    calculateInflowVelocity();
     
 
     // Subtract spanwise component of inflow velocity
-    vector spanwiseVelocity = spanDirection_
-                            * (inflowVelocity_ & spanDirection_)
-                            / magSqr(spanDirection_);
-    inflowVelocity_ -= spanwiseVelocity;
+    vector spanwiseVelocity =
+        spanDirection_[azimuthIndex_]
+            * (inflowVelocity_[azimuthIndex_] & spanDirection_[azimuthIndex_])
+            / magSqr(spanDirection_[azimuthIndex_]);
+    inflowVelocity_[azimuthIndex_] -= spanwiseVelocity;
 
     // Calculate relative velocity and Reynolds number
-    relativeVelocity_ = inflowVelocity_ - velocity_;
-    Re_ = mag(relativeVelocity_)*chordLength_/nu_;
+    relativeVelocity_[azimuthIndex_] =
+        inflowVelocity_[azimuthIndex_] - velocity_[azimuthIndex_];
+    Re_ = mag(relativeVelocity_[azimuthIndex_])*chordLength_/nu_;
 
     // Calculate angle of attack (radians)
     scalar arg =
-        (planformNormal_ & relativeVelocity_)
-        / (mag(planformNormal_) * mag(relativeVelocity_));
+        (planformNormal_ & relativeVelocity_[azimuthIndex_])
+        / (mag(planformNormal_) * mag(relativeVelocity_[azimuthIndex_]));
     scalar angleOfAttackRad = asin(sign(arg)*min(Foam::scalar(1.0), mag(arg)));
     scalar angleOfAttackUncorrected = radToDeg(angleOfAttackRad);
-    relativeVelocityGeom_ = freeStreamVelocity_ - velocity_;
+    relativeVelocityGeom_ = freeStreamVelocity_ - velocity_[azimuthIndex_];
     scalar argGeom =
         (planformNormal_ & relativeVelocityGeom_)
         / (mag(planformNormal_) * mag(relativeVelocityGeom_));
@@ -1063,9 +1248,6 @@ void Foam::fv::actuatorLineElement::calculateForce
     angleOfAttack_ = radToDeg(angleOfAttackRad);
 
     // Update Reynolds number of profile data
-    
-    //calculateInflowVelocity(UInterp); // Is this result ever used?
-
     profileData_.updateRe(Re_);
 
     // Lookup lift and drag coefficients
@@ -1073,8 +1255,10 @@ void Foam::fv::actuatorLineElement::calculateForce
 
     if (debug)
     {
-        Info<< "    inflowVelocity: " << inflowVelocity_ << endl;
-        Info<< "    relativeVelocity: " << relativeVelocity_ << endl;
+        Info<< "    inflowVelocity: "
+            << inflowVelocity_[azimuthIndex_] << endl;
+        Info<< "    relativeVelocity: "
+            << relativeVelocity_[azimuthIndex_] << endl;
         Info<< "    Reynolds number: " << Re_ << endl;
         Info<< "    Geometric angle of attack (degrees): "
             << angleOfAttackGeom_ << endl;
@@ -1089,11 +1273,11 @@ void Foam::fv::actuatorLineElement::calculateForce
     {
         dynamicStall_->correct
         (
-            mag(relativeVelocity_),
+            mag(relativeVelocity_[azimuthIndex_]),
             angleOfAttack_,
-            liftCoefficient_,
-            dragCoefficient_,
-            momentCoefficient_
+            liftCoefficient_[azimuthIndex_],
+            dragCoefficient_[azimuthIndex_],
+            momentCoefficient_[azimuthIndex_]
         );
     }
 
@@ -1102,33 +1286,47 @@ void Foam::fv::actuatorLineElement::calculateForce
     {
         addedMass_.correct
         (
-            liftCoefficient_,
-            dragCoefficient_,
-            momentCoefficient_,
+            liftCoefficient_[azimuthIndex_],
+            dragCoefficient_[azimuthIndex_],
+            momentCoefficient_[azimuthIndex_],
             degToRad(angleOfAttack_),
-            mag(chordDirection_ & relativeVelocity_),
-            mag(planformNormal_ & relativeVelocity_)
+            mag
+            (
+                chordDirection_[azimuthIndex_]
+                    & relativeVelocity_[azimuthIndex_]
+            ),
+            mag(planformNormal_ & relativeVelocity_[azimuthIndex_])
         );
     }
 
     // Apply end effect correction factor to lift coefficient
-    liftCoefficient_ *= endEffectFactor_;
+    liftCoefficient_[azimuthIndex_] *= endEffectFactor_;
 
     // Calculate force per unit density
     scalar area = chordLength_ * spanLength_;
-    scalar magSqrU = magSqr(relativeVelocity_);
-    scalar lift = 0.5*area*liftCoefficient_*magSqrU;
-    scalar drag = 0.5*area*dragCoefficient_*magSqrU;
-    vector liftDirection = relativeVelocity_ ^ spanDirection_;
+    scalar magSqrU = magSqr(relativeVelocity_[azimuthIndex_]);
+    scalar lift = 0.5*area*liftCoefficient_[azimuthIndex_]*magSqrU;
+    scalar drag = 0.5*area*dragCoefficient_[azimuthIndex_]*magSqrU;
+    vector liftDirection =
+        relativeVelocity_[azimuthIndex_] ^ spanDirection_[azimuthIndex_];
     liftDirection /= mag(liftDirection);
-    vector dragDirection = relativeVelocity_/mag(relativeVelocity_);
-    forceVector_ = lift*liftDirection + drag*dragDirection;
+    vector dragDirection =
+        relativeVelocity_[azimuthIndex_]/mag(relativeVelocity_[azimuthIndex_]);
+    forceVector_[azimuthIndex_] = lift*liftDirection + drag*dragDirection;
 
     if (debug)
     {
         Info<< "    liftDirection: " << liftDirection << endl;
         Info<< "    dragDirection: " << dragDirection << endl;
-        Info<< "    force (per unit density): " << forceVector_ << endl;
+        Info<< "    force (per unit density): "
+            << forceVector_[azimuthIndex_] << endl;
+    }
+    calcProjectionEpsilon();
+
+    // Write performance to file
+    if (Pstream::master() && (writePerf_ || writePerfEnd_))
+    {
+        writePerf();
     }
 }
 
@@ -1170,15 +1368,17 @@ void Foam::fv::actuatorLineElement::rotate
         Info<< "Rotation axis: " << axis << endl;
         Info<< "Rotation angle (radians): " << radians << endl;
         Info<< "Rotation matrix:" << endl << RM << endl;
-        Info<< "Initial position: " << position_ << endl;
-        Info<< "Initial chordDirection: " << chordDirection_ << endl;
-        Info<< "Initial spanDirection: " << spanDirection_ << endl;
-        Info<< "Initial velocity: " << velocity_ << endl;
+        Info<< "Initial position: " << position_[azimuthIndex_] << endl;
+        Info<< "Initial chordDirection: "
+            << chordDirection_[azimuthIndex_] << endl;
+        Info<< "Initial spanDirection: "
+            << spanDirection_[azimuthIndex_] << endl;
+        Info<< "Initial velocity: " << velocity_[azimuthIndex_] << endl;
     }
 
     // Rotation matrices make a rotation about the origin, so need to subtract
     // rotation point off the point to be rotated.
-    vector point = position_;
+    vector point = position_[azimuthIndex_];
     point -= rotationPoint;
 
     // Perform the rotation.
@@ -1188,27 +1388,29 @@ void Foam::fv::actuatorLineElement::rotate
     // point
     point += rotationPoint;
 
+    label nextIndex = (azimuthIndex_ + 1)% position_.size();
     // Set the position of the element
-    position_ = point;
+    position_[nextIndex] = point;
 
     // Rotate the span and chord vectors of the element
-    chordDirection_ = RM & chordDirection_;
-    spanDirection_ = RM & spanDirection_;
+    chordDirection_[nextIndex] = RM & chordDirection_[azimuthIndex_];
+    spanDirection_[nextIndex] = RM & spanDirection_[azimuthIndex_];
 
     // Rotate the element's velocity vector if specified
     if (rotateVelocity)
     {
-        velocity_ = RM & velocity_;
-        chordRefDirection_ = RM & chordRefDirection_;
+        velocity_[nextIndex] = RM & velocity_[azimuthIndex_];
+        chordRefDirection_[nextIndex] = RM & chordRefDirection_[azimuthIndex_];
     }
 
     if (debug)
     {
-        Info<< "Final position: " << position_ << endl;
-        Info<< "Final chordDirection: " << chordDirection_ << endl;
-        Info<< "Final chordRefDirection: " << chordRefDirection_ << endl;
-        Info<< "Final spanDirection: " << spanDirection_ << endl;
-        Info<< "Final velocity: " << velocity_ << endl << endl;
+        Info<< "Final position: " << position_[nextIndex] << endl;
+        Info<< "Final chordDirection: " << chordDirection_[nextIndex] << endl;
+        Info<< "Final chordRefDirection: "
+            << chordRefDirection_[nextIndex] << endl;
+        Info<< "Final spanDirection: " << spanDirection_[nextIndex] << endl;
+        Info<< "Final velocity: " << velocity_[nextIndex] << endl << endl;
     }
 }
 
@@ -1219,15 +1421,162 @@ void Foam::fv::actuatorLineElement::pitch
     scalar chordFraction
 )
 {
-    vector rotationPoint = position_;
-    rotationPoint += chordDirection_*(chordMount_ - chordFraction);
-    rotate(rotationPoint, spanDirection_, radians, false);
+    vector rotationPoint = position_[azimuthIndex_];
+    rotationPoint +=
+        chordDirection_[azimuthIndex_]*(chordMount_ - chordFraction);
+    rotate(rotationPoint, spanDirection_[azimuthIndex_], radians, false);
 }
 
+label Foam::fv::actuatorLineElement::locationCount() const
+{
+    label n = position_.size();  // Central point
+
+    if (velocitySampleRadius_ > 0.0)
+    {
+        if (previousRingLocation_.empty() == false)
+        {
+            n += previousRingLocation_.size() * previousRingLocation_[0].size();
+        }
+    }
+    return n;
+}
+
+label Foam::fv::actuatorLineElement::epsilonCount() const
+{
+    return epsilon_.size();
+}
+
+void Foam::fv::actuatorLineElement::collectLocationData
+(
+    List<label> &globalCellI,
+    List<label> &globalProcI,
+    List<point> &globalLocations,
+    label &index,
+    bool includeRing
+) const
+{
+    const label nCenter = position_.size();
+
+    // --- Center ---
+    SubList<point>(globalLocations, nCenter, index) = position_;
+    SubList<label>(globalCellI,     nCenter, index) = centerCellI_;
+    SubList<label>(globalProcI,     nCenter, index) = centerProcI_;
+    index += nCenter;
+
+    // --- Rings ---
+    if (velocitySampleRadius_ > 0.0 && includeRing)
+    {
+        forAll(previousRingLocation_, ringI)
+        {
+            const List<point>&  ringPos  = previousRingLocation_[ringI];
+            const List<label>&  ringCell = ringCellI_[ringI];
+            const List<label>&  ringProc = ringProcI_[ringI];
+
+            const label nRing = ringPos.size();
+
+            SubList<point>(globalLocations, nRing, index) = ringPos;
+            SubList<label>(globalCellI,     nRing, index) = ringCell;
+            SubList<label>(globalProcI,     nRing, index) = ringProc;
+
+            index += nRing;
+        }
+    }
+}
+
+void Foam::fv::actuatorLineElement::distributeVelocityData
+(
+    const List<label> &globalCellI,
+    const List<label> &globalProcI,
+    const List<vector> &globalVelocities,
+    label &index
+)
+{
+    const label nCenter = position_.size();
+
+    // --- Center ---
+    centerCellI_ = SubList<label>(globalCellI, nCenter, index);
+    centerProcI_ = SubList<label>(globalProcI, nCenter, index);
+    SubList<vector>(inflowVelocity_, nCenter, 0) =
+        SubList<vector>(globalVelocities, nCenter, index);
+
+    index += nCenter;
+
+    // --- Rings ---
+    if (velocitySampleRadius_ > 0.0)
+    {
+        forAll(previousRingLocation_, ringI)
+        {
+            List<label>&  ringCell = ringCellI_[ringI];
+            List<label>&  ringProc = ringProcI_[ringI];
+            List<vector>& ringVel  = velocitiesRing_[ringI];
+
+            const label nRing = ringCell.size();
+
+            ringCell = SubList<label>(globalCellI,  nRing, index);
+            ringProc = SubList<label>(globalProcI,  nRing, index);
+            ringVel  = SubList<vector>(globalVelocities, nRing, index);
+
+            index += nRing;
+        }
+    }
+}
+
+void Foam::fv::actuatorLineElement::distributeCenterCellI
+(
+    const List<label>& globalCellI,
+    const List<label>& globalProcI,
+    label& index
+)
+{
+    const label nCenter = centerCellI_.size();
+    centerCellI_ = SubList<label>(globalCellI, nCenter, index);
+    centerProcI_ = SubList<label>(globalProcI, nCenter, index);
+    index += nCenter;
+}
+
+void Foam::fv::actuatorLineElement::collectEpsilonData
+(
+    List<scalar> &globalEpsilon,
+    label &index
+) const
+{
+    const label nCenter = epsilon_.size();
+    SubList<scalar>(globalEpsilon, nCenter, index) = epsilon_;
+    index += nCenter;
+}
+
+void Foam::fv::actuatorLineElement::calcInfluenceEpsilon()
+{
+    // Calculate projection width
+    dragCoefficient_ = 4; // Should realistically not be larger than this
+    calcProjectionEpsilon();
+}
+
+void Foam::fv::actuatorLineElement::distributeEpsilonData
+(
+    List<scalar> &globalEpsilon,
+    label &index
+)
+{
+    const label nCenter = epsilon_.size();
+    epsilon_ = SubList<scalar>(globalEpsilon, nCenter, index);
+    index += nCenter;
+}
+
+void Foam::fv::actuatorLineElement::distributeRhoData
+(
+    List<scalar> &globalRho,
+    label &index
+)
+{
+    const label nCenter = localRho_.size();
+    localRho_ = SubList<scalar>(globalRho, nCenter, index);
+    index += nCenter;
+}
 
 void Foam::fv::actuatorLineElement::translate(vector translationVector)
 {
-    position_ += translationVector;
+    position_[azimuthIndex_] += translationVector;
 }
 
 
@@ -1236,18 +1585,18 @@ void Foam::fv::actuatorLineElement::setVelocity(vector velocity)
     if (debug)
     {
         Info<< "Changing velocity of " << name_ << " from "
-            << velocity_ << " to " << velocity << endl << endl;
+            << velocity_[azimuthIndex_] << " to " << velocity << endl << endl;
     }
-    velocity_ = velocity;
+    velocity_[azimuthIndex_] = velocity;
 }
 
 
 void Foam::fv::actuatorLineElement::setSpeed(scalar speed)
 {
-    if (mag(velocity_) > 0)
+    if (mag(velocity_[azimuthIndex_]) > 0)
     {
-        velocity_ /= mag(velocity_);
-        velocity_ *= speed;
+        velocity_[azimuthIndex_] /= mag(velocity_[azimuthIndex_]);
+        velocity_[azimuthIndex_] *= speed;
     }
 }
 
@@ -1262,14 +1611,15 @@ void Foam::fv::actuatorLineElement::setSpeed
     if (debug)
     {
         Info<< "Setting speed of " << name_ << " from rotation" << endl;
-        Info<< "    Initial velocity: " << velocity_ << endl;
+        Info<< "    Initial velocity: " << velocity_[azimuthIndex_] << endl;
     }
 
     // First find radius from axis to element position -- formula from
     // http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
     vector point2 = point + axis;
-    scalar radius = mag((position_ - point) ^ (position_ - point2))
-                  / mag(point2 - point);
+    scalar radius = mag((position_[azimuthIndex_] - point) ^
+                    (position_[azimuthIndex_] - point2))
+                    / mag(point2 - point);
     scalar speed = omega*radius;
     setSpeed(speed);
 
@@ -1280,14 +1630,26 @@ void Foam::fv::actuatorLineElement::setSpeed
         // Set velocity at leading edge
         scalar radiusLE = sqrt(magSqr(0.25*chordLength_) + magSqr(radius));
         angleLE = atan2(0.25*chordLength_, radius);
-        velocityLE_ = velocity_*radiusLE/radius;
-        rotateVector(velocityLE_, vector::zero, spanDirection_, angleLE);
+        velocityLE_ = velocity_[azimuthIndex_]*radiusLE/radius;
+        rotateVector
+        (
+            velocityLE_,
+            vector::zero,
+            spanDirection_[azimuthIndex_],
+            angleLE
+        );
 
         // Set velocity at trailing edge
         scalar radiusTE = sqrt(magSqr(0.75*chordLength_) + magSqr(radius));
         angleTE = atan2(-0.75*chordLength_, radius);
-        velocityTE_ = velocity_*radiusTE/radius;
-        rotateVector(velocityTE_, vector::zero, spanDirection_, angleTE);
+        velocityTE_ = velocity_[azimuthIndex_]*radiusTE/radius;
+        rotateVector
+        (
+            velocityTE_,
+            vector::zero,
+            spanDirection_[azimuthIndex_],
+            angleTE
+        );
     }
 
     // Also set omega for flow curvature correction
@@ -1296,7 +1658,7 @@ void Foam::fv::actuatorLineElement::setSpeed
     if (debug)
     {
         Info<< "    Radius: " << radius << endl;
-        Info<< "    Final velocity: " << velocity_ << endl;
+        Info<< "    Final velocity: " << velocity_[azimuthIndex_] << endl;
         Info<< "    Leading edge velocity: " << velocityLE_ << endl;
         Info<< "    Trailing edge velocity: " << velocityTE_ << endl;
         Info<< "    Leading edge velocity angle (radians): "
@@ -1309,112 +1671,43 @@ void Foam::fv::actuatorLineElement::setSpeed
 
 void Foam::fv::actuatorLineElement::scaleVelocity(scalar scale)
 {
-    velocity_ *= scale;
+    velocity_[azimuthIndex_] *= scale;
 }
 
 
 const Foam::vector& Foam::fv::actuatorLineElement::force()
 {
-    return forceVector_;
+    return forceVector_[azimuthIndex_];
 }
 
 
 Foam::vector Foam::fv::actuatorLineElement::moment(vector point)
 {
     // Calculate radius vector
-    vector radius = position_ - point;
-    vector moment = radius ^ forceVector_;
+    vector radius = position_[azimuthIndex_] - point;
+    vector moment = radius ^ forceVector_[azimuthIndex_];
     vector pitchingMoment = 0.5*chordLength_*chordLength_*spanLength_
-                          * momentCoefficient_*magSqr(relativeVelocity_)
-                          * spanDirection_;
+                          * momentCoefficient_[azimuthIndex_]
+                          * magSqr(relativeVelocity_[azimuthIndex_])
+                          * spanDirection_[azimuthIndex_];
     return moment + pitchingMoment;
 }
 
 
 void Foam::fv::actuatorLineElement::addForce
 (
-    const interpolationCellPoint<vector>& UInterp,
     volVectorField& forceField,
-    scalar scale
+    scalar scale,
+    bool compressible
 )
 {
-    /*volVectorField forceFieldI
-    (
-        IOobject
-        (
-            "force." + name_,
-            mesh_.time().timeName(),
-            mesh_
-        ),
-        mesh_,
-        dimensionedVector
-        (
-            "zero",
-            forceField.dimensions(),
-            vector::zero
-        )
-    );*/
-
-    //const volVectorField& Uin(eqn.psi());
-
-    calculateForce(UInterp);
     applyForceField(forceField, scale);
 
-    // Add force to total actuator line force
-    //forceField += forceFieldI;
-
-    // Write performance to file
-    if (Pstream::master() && (writePerf_ || writePerfEnd_))
-    {
-        writePerf();
-    }
-}
-
-
-void Foam::fv::actuatorLineElement::addForce
-(
-    const volScalarField& rho,
-    const interpolationCellPoint<vector>& UInterp,
-    volVectorField& forceField,
-    scalar scale
-)
-{
-    /*volVectorField forceFieldI
-    (
-        IOobject
-        (
-            "force." + name_,
-            mesh_.time().timeName(),
-            mesh_
-        ),
-        mesh_,
-        dimensionedVector
-        (
-            "zero",
-            forceField.dimensions()/rho.dimensions(),
-            vector::zero
-        )
-    );*/
-
-    //const volVectorField& Uin(eqn.psi());
-    calculateForce(UInterp);
-    applyForceField(forceField, scale);
-
-    // Multiply force vector by local density
-    multiplyForceRho(rho);
-
-    // Multiply this element's force field by density field
-    // (moved to actuatorLineSource as it is the same rho for all)
-    //forceFieldI *= rho;
-
-    // Add force to total actuator line force
-    // forceField += forceFieldI;
-
-    // Write performance to file
-    if (Pstream::master() && (writePerf_ || writePerfEnd_))
-    {
-        writePerf();
-    }
+    //if (compressible)
+    //{
+        // Multiply force vector by local density
+    //    multiplyForceRho();
+    //}
 }
 
 void Foam::fv::actuatorLineElement::addTurbulence
@@ -1423,37 +1716,21 @@ void Foam::fv::actuatorLineElement::addTurbulence
     word fieldName
 )
 {
-    /*volScalarField turbulence
-    (
-        IOobject
-        (
-            "turbulence." + name_,
-            mesh_.time().timeName(),
-            mesh_,
-            IOobject::NO_READ,
-            IOobject::NO_WRITE
-        ),
-        mesh_,
-        dimensionedScalar
-        (
-            "zero",
-            eqn.dimensions()/dimVolume,
-            0.0
-        )
-    );*/
 
     // Calculate projection radius
-    scalar epsilon = calcProjectionEpsilon();
-    scalar projectionRadius = (epsilon*Foam::sqrt(Foam::log(1.0/0.001)));
+    //scalar epsilon = calcProjectionEpsilon();
+    scalar projectionRadius =
+        (epsilon_[azimuthIndex_]*Foam::sqrt(Foam::log(1.0/0.001)));
 
     // Calculate TKE injection rate
-    scalar k = 0.1*mag(dragCoefficient_);
+    scalar k = 0.1*mag(dragCoefficient_[azimuthIndex_]);
 
     // Add turbulence to the cells within the element's sphere of influence
     scalar sphereRadius = chordLength_ + projectionRadius;
     scalar sphereRadiusSqr = sphereRadius*sphereRadius;
-    scalar invepsilonSqr = 1.0/(epsilon*epsilon);
-    scalar internalFactor = 1.0/(Foam::pow(epsilon, 3)
+    scalar invepsilonSqr =
+        1.0/(epsilon_[azimuthIndex_]*epsilon_[azimuthIndex_]);
+    scalar internalFactor = 1.0/(Foam::pow(epsilon_[azimuthIndex_], 3)
                           * Foam::pow(Foam::constant::mathematical::pi, 1.5));
                           
     const vectorField& C = mesh_.C();
@@ -1464,7 +1741,7 @@ void Foam::fv::actuatorLineElement::addTurbulence
     {
         forAll(mesh_.cells(), cellI)
         {
-            scalar dis = magSqr(C[cellI] - position_);
+            scalar dis = magSqr(C[cellI] - position_[azimuthIndex_]);
             if (dis <= sphereRadiusSqr)
             {
                 scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
@@ -1490,7 +1767,7 @@ void Foam::fv::actuatorLineElement::addTurbulence
         forAll(cells, i)
         {
             label cellI = cells[i];
-            scalar dis = magSqr(C[cellI] - position_);
+            scalar dis = magSqr(C[cellI] - position_[azimuthIndex_]);
             if (dis <= sphereRadiusSqr)
             {
                 scalar factor = Foam::exp(-dis*invepsilonSqr)*internalFactor;
@@ -1571,5 +1848,23 @@ void Foam::fv::actuatorLineElement::setCompactFields
 {
     activePositionsPtr_ = &activePositions;
     activeForceFieldPtr_ = &activeForceField;
+}
+
+
+vector& Foam::fv::actuatorLineElement::inflowVelocity()
+{
+    return inflowVelocity_[azimuthIndex_];
+}
+
+
+const vector& Foam::fv::actuatorLineElement::inflowVelocity() const
+{
+    return inflowVelocity_[azimuthIndex_];
+}
+
+
+const scalar& Foam::fv::actuatorLineElement::epsilon() const
+{
+    return epsilon_[azimuthIndex_];
 }
 // ************************************************************************* //

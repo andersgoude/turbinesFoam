@@ -36,7 +36,8 @@ SourceFiles
 #define turbineALSource_H
 
 #include "cellSetOption.H"
-//#include "NamedEnum.H"
+//#include "NamedEnum.H
+#include "actuatorModelBase.H"
 #include "actuatorLineSource.H"
 #include "volFieldsFwd.H"
 #include "OFstream.H"
@@ -54,7 +55,7 @@ namespace fv
 
 class turbineALSource
 :
-    public cellSetOption
+    public actuatorModelBase
 {
 
 protected:
@@ -81,7 +82,23 @@ protected:
         scalar omega_;
 
         //- Azimuthal angle in degrees (does not reset each rotation)
-        scalar angleDeg_;
+        scalar baseAngleDeg_;
+
+        //- List of angles for each position
+        List<scalar> angleDeg_;
+
+        //- internal time for actuator disc (for use by dynamic stall model)
+        //- used to perform a loop within the openfoam-step
+        scalar baseCustomTime_;
+
+        //- List of custom time values for actuator disc
+        List<scalar> customTime_;
+
+        //- deltaT value associated with customTime
+        scalar customDeltaT_;
+
+        // current position for the actuator disc
+        label azimuthIndex_;
 
         //- Number of blades
         label nBlades_;

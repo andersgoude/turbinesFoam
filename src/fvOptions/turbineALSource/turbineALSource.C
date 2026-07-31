@@ -198,7 +198,7 @@ void Foam::fv::turbineALSource::createOutputFile()
 void Foam::fv::turbineALSource::updateTSROmega()
 {
     // Update tip speed ratio and omega
-    scalar theta = degToRad(angleDeg_);
+    scalar theta = degToRad(angleDeg_[azimuthIndex_]);
     tipSpeedRatio_ = meanTSR_ + tsrAmplitude_*cos(nBlades_*(theta - tsrPhase_));
     omega_ = tipSpeedRatio_*mag(freeStreamVelocity_)/rotorRadius_;
 }
@@ -209,7 +209,8 @@ void Foam::fv::turbineALSource::rotate()
     scalar deltaT = time_.deltaT().value();
     scalar radians = omega_*deltaT;
     rotate(radians);
-    angleDeg_ += radToDeg(radians);
+    baseAngleDeg_ += radToDeg(radians);
+    angleDeg_[azimuthIndex_] = baseAngleDeg_;
     lastRotationTime_ = time_.value();
     updateTSROmega();
 }
@@ -223,8 +224,8 @@ void Foam::fv::turbineALSource::rotate(scalar radians)
 
 void Foam::fv::turbineALSource::printPerf()
 {
-    Info<< "Azimuthal angle (degrees) of " << name_ << ": " << angleDeg_
-        << endl;
+    Info<< "Azimuthal angle (degrees) of " << name_ << ": "
+        << angleDeg_[azimuthIndex_] << endl;
     Info<< "Tip speed ratio of " << name_ << ": " << tipSpeedRatio_ << endl;
     Info<< "Power coefficient from " << name_ << ": " << powerCoefficient_
         << endl;
@@ -243,12 +244,17 @@ Foam::fv::turbineALSource::turbineALSource
     const fvMesh& mesh
 )
 :
-    cellSetOption(name, modelType, dict, mesh),
+    actuatorModelBase(name, modelType, dict, mesh),
     time_(mesh.time()),
     lastRotationTime_(time_.value()),
     rhoRef_(1.0),
     omega_(0.0),
-    angleDeg_(0.0),
+    baseAngleDeg_(0.0),
+    angleDeg_(1, 0.0),
+    baseCustomTime_(0.0),
+    customTime_(1, 0.0),
+    customDeltaT_(0.0),
+    azimuthIndex_(0),
     nBlades_(0),
     freeStreamVelocity_(vector::zero),
     forceField_
@@ -325,7 +331,7 @@ void Foam::fv::turbineALSource::printCoeffs() const
 
 void Foam::fv::turbineALSource::writePerf()
 {
-    *outputFile_<< time_.value() << "," << angleDeg_ << ","
+    *outputFile_<< time_.value() << "," << angleDeg_[azimuthIndex_] << ","
                 << tipSpeedRatio_ << "," << powerCoefficient_ << ","
                 << dragCoefficient_ << "," << torqueCoefficient_;
 

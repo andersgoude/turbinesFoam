@@ -147,6 +147,15 @@ protected:
         //- Yaw the turbine, i.e., rotate about vertical axis
         void yaw(scalar radians);
 
+        //- Set up positions by calling findCells on all actuator line elements
+        virtual void setupPositions(bool includeRing=true);
+
+        //- Work to be done first time for calculateALData
+        virtual void allocateAL();
+
+        //- Calculate the force once velocity is sampled
+        virtual void calculateForces();
+
 
 public:
 
@@ -171,6 +180,14 @@ public:
 
 
     // Member Functions
+
+        virtual void addForce
+        (
+            fvMatrix<vector>& eqn,
+            volVectorField& forceField,
+            scalar scale,
+            bool compressible
+        );
 
         // Source term addition
 

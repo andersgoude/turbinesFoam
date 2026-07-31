@@ -79,14 +79,14 @@ protected:
         boundBox meshBoundBox_;
 
         //- Chord direction -- pointing from trailing to leading edge
-        vector chordDirection_;
+        List<vector> chordDirection_;
 
         //- Chord length
         scalar chordLength_;
 
         //- Span direction -- direction about which element will pitch
         //  Can be obtained by sweeping chord direction into planform normal
-        vector spanDirection_;
+        List<vector> spanDirection_;
 
         //- Element span length, for calculating force
         scalar spanLength_;
@@ -96,13 +96,13 @@ protected:
         vector planformNormal_;
 
         //- Element chord reference direction
-        vector chordRefDirection_;
+        List<vector> chordRefDirection_;
 
         //- Location of element's quarter-chord
-        vector position_;
+        List<vector> position_;
 
         //- Velocity of the element
-        vector velocity_;
+        List<vector> velocity_;
 
         //- Free stream velocity
         vector freeStreamVelocity_;
@@ -112,25 +112,37 @@ protected:
 
         //- Fluid force on element -- vector that is perpendicular to
         //  spanDirection,
-        vector forceVector_;
+        List<vector> forceVector_;
 
         //- Reference density for incompressible case
         scalar rhoRef_;
 
+        //- Density at element location for compressible case
+        List<scalar> localRho_;
+
         //- Inflow velocity
-        vector inflowVelocity_;
+        List<vector> inflowVelocity_;
+
+        //- Epsilon for force projection width
+        List<scalar> epsilon_;
 
         //- Previously found cell, to prevent unnecessary lookups
-        label previousCellI_;
+        List<label> previousCenterCellI_;
 
         //- Previously found cell, to prevent unnecessary lookups
-        label previousProcI_;
+        List<label> previousCenterProcI_;
 
         //- Previously found cell, to prevent unnecessary lookups
-        point previousLocation_;
+        List<point> previousLocation_;
+
+        //- Previously found ring cell (actuator disc only)
+        List<List<point>> previousRingLocation_;
 
         //- Previously found cell, to prevent unnecessary lookups
-        bool previousLocationValid_;
+        List<bool> previousLocationValid_;
+
+        //- Previously found ring location (actuator disc only)
+        List<List<bool>> previousRingLocationValid_;
 
         //- for acutatorDisc, have previous positions stored for fast lookup
         List<label> centerCellI_;
@@ -144,11 +156,14 @@ protected:
         //- for actuatorDisc, ring sampling
         List<List<label>> ringProcI_;
 
+        //- corresponding velocities to ringCellI_
+        List<List<vector>> velocitiesRing_;
+
         //- active ring index for caching
         label activeRingIndex_;
 
         //- Relative flow velocity
-        vector relativeVelocity_;
+        List<vector> relativeVelocity_;
 
         //- Geometric relative flow velcity
         vector relativeVelocityGeom_;
@@ -160,13 +175,13 @@ protected:
         scalar angleOfAttackGeom_;
 
         //- Lift coefficient
-        scalar liftCoefficient_;
+        List<scalar> liftCoefficient_;
 
         //- Drag coefficient;
-        scalar dragCoefficient_;
+        List<scalar> dragCoefficient_;
 
         //- 1/4 chord moment coefficient
-        scalar momentCoefficient_;
+        List<scalar> momentCoefficient_;
 
         //- Profile name
         word profileName_;
@@ -265,19 +280,19 @@ protected:
         );
 
         //- Find cell containing location
-        label findCell(const point& location);
+        //label findCell(const point& location);
 
         //- Lookup force coefficients
         void lookupCoefficients();
 
         //- Calculate projection width epsilon
-        scalar calcProjectionEpsilon();
+        void calcProjectionEpsilon();
 
         //- Correct for flow curvatue
         void correctFlowCurvature(scalar& angleOfAttackRad);
 
         //- Multiply force vector by local density
-        void multiplyForceRho(const volScalarField& rho);
+        void multiplyForceRho();
 
         //- Apply force field based on force vector
         void applyForceField
@@ -288,19 +303,13 @@ protected:
 
 
         //- Get inflow velocity
-        void calculateInflowVelocity
-        (
-            const interpolationCellPoint<vector>& UInterp
-        );
+        void calculateInflowVelocity();
 
         //- Create the performance output file
         virtual void createOutputFile();
 
         //- Write performance to CSV
         void writePerf();
-
-        //- Check if it is the last iteration for actuator disc
-        bool isLastIteration() const;
 
 
 public:
@@ -406,7 +415,74 @@ public:
             //  attack plus twist
             scalar inflowRefAngle();
 
+            //- Return inflow velocity
+            vector& inflowVelocity();
 
+            //- Return inflow velocity
+            const vector& inflowVelocity() const;
+
+            //- Return epsilon for force projection width
+            const scalar& epsilon() const;
+
+            //- Return the number of locations for velocity sampling
+            label locationCount() const;
+
+            //- Return the number of epsilon values stored
+            label epsilonCount() const;
+            
+            //- collect the locations of the actuator line element
+            // for velocity sampling
+            void collectLocationData
+            (
+                List<label>& globalCellI,
+                List<label>& globalProcI,
+                List<point>& globalLocations,
+                label& index,
+                bool includeRing = true
+            ) const;
+
+            //- distribute the locations of the actuator line element
+            // and sampled velocity
+            void distributeVelocityData
+            (
+                const List<label>& globalCellI,
+                const List<label>& globalProcI,
+                const List<vector>& globalVelocities,
+                label& index
+            );
+
+            //- Distribute only centerCellI for the inital setup
+            void distributeCenterCellI
+            (
+                const List<label>& globalCellI,
+                const List<label>& globalProcI,
+                label& index
+            );
+
+            //- collect epsilon of the actuator line elements
+            void collectEpsilonData
+            (
+                List<scalar>& globalEpsilon,
+                label& index
+            ) const;
+
+            //- Calculate projection width epsilon for influence cells
+            void calcInfluenceEpsilon();
+
+
+            //- distribute epsilon of the actuator line elements
+            void distributeEpsilonData
+            (
+                List<scalar>& globalEpsilon,
+                label& index
+            );
+
+            //- distribute rho of the actuator line elements
+            void distributeRhoData
+            (
+                List<scalar>& globalRho,
+                label& index
+            );
         // Manipulation
 
             //- Translate the element's location
@@ -419,12 +495,6 @@ public:
                 vector axis,
                 scalar radians,
                 bool rotateVelocity
-            );
-            void rotate
-            (
-                vector rotationPoint,
-                vector axis,
-                scalar radians
             );
 
             //- Pitch the element about some fraction of the chord
@@ -487,14 +557,21 @@ public:
             //- allocate the list of influence cells (for actuator disc)
             void setAzimuthIndex(label azimuthIndex);
 
+            //- Check if one can find the cell in
+            // the nearby positions of the last cell
+            label findNearbyCell(
+                const point& location,
+                const label previousCell
+            );
+
+            //- Find cells that can be determined without parallel interaction
+            void findCells(bool includeRing=true);
+
 
         // Evaluation
 
             //- Calculate forces
-            void calculateForce
-            (
-                const interpolationCellPoint<vector>& UInterp
-            );
+            void calculateForce();
 
             //- Read coefficient data
             void read();
@@ -506,24 +583,16 @@ public:
         // Source term addition
 
             //- Source term to momentum equation
-            virtual void addForce
+            void addForce
             (
-                const interpolationCellPoint<vector>& UInterp,
                 volVectorField& force,
-                scalar scale
+                scalar scale,
+                bool compressible
             );
 
             //- Add source term to turbulence quantity
             virtual void addTurbulence(fvMatrix<scalar>& eqn, word fieldName);
 
-            //- Source term to compressible momentum equation
-            virtual void addForce
-            (
-                const volScalarField& rho,
-                const interpolationCellPoint<vector>& UInterp,
-                volVectorField& force,
-                scalar scale
-            );
 };
 
 

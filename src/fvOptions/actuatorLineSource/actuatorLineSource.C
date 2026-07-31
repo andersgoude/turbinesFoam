@@ -528,6 +528,25 @@ void Foam::fv::actuatorLineSource::harmonicPitching()
     }
 }
 
+//- virtual function setupPositions is protected,
+// but findCells needs to be public
+void Foam::fv::actuatorLineSource::setupPositions()
+{
+    findCells();
+}
+
+//- same as above, calculateForces is the virtual function
+// that has to be implemented
+void Foam::fv::actuatorLineSource::calculateForces()
+{
+    calculateElementForces();
+}
+
+//- same as above, need to implement allocateAL
+void Foam::fv::actuatorLineSource::allocateAL()
+{
+    allocateInfluenceCells(1, false);
+}
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
@@ -539,7 +558,7 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     const fvMesh& mesh
 )
 :
-    cellSetOption(name, modelType, dict, mesh),
+    actuatorModelBase(name, modelType, dict, mesh),
     force_(vector::zero),
     forceField_
     (
@@ -586,6 +605,10 @@ Foam::fv::actuatorLineSource::actuatorLineSource
         mesh_.time().controlDict().lookup("writePrecision") >> precision;
     }
     stringBuffer_.precision(precision);
+
+    // an actuatorLineSource will only have itself in actuatorLines
+    actuatorLines_.setSize(1);
+    actuatorLines_[0] = this;
 }
 
 
@@ -712,6 +735,15 @@ void Foam::fv::actuatorLineSource::setApplyForce(bool active)
     applyForce_ = active;
 }
 
+
+void Foam::fv::actuatorLineSource::calcInfluenceEpsilon()
+{
+    forAll(elements_, i)
+    {
+        elements_[i].calcInfluenceEpsilon();
+    }
+}
+
 void Foam::fv::actuatorLineSource::allocateInfluenceCells
 (
     label count,
@@ -774,6 +806,21 @@ void Foam::fv::actuatorLineSource::setAzimuthIndex
     }
 }
 
+void Foam::fv::actuatorLineSource::findCells(bool includeRing)
+{
+    forAll(elements_, i)
+    {
+        elements_[i].findCells(includeRing);
+    }
+}
+
+void Foam::fv::actuatorLineSource::calculateElementForces()
+{
+    forAll(elements_, i)
+    {
+        elements_[i].calculateForce();
+    }
+}
 
 const Foam::vector& Foam::fv::actuatorLineSource::force()
 {
@@ -814,18 +861,11 @@ Foam::vector Foam::fv::actuatorLineSource::moment(vector point)
 void Foam::fv::actuatorLineSource::addForce
 (
     fvMatrix<vector>& eqn,
-    interpolationCellPoint<vector>& UInterp,
     volVectorField& forceField,
-    const label fieldI,
-    scalar scale
+    scalar scale,
+    bool compressible
 )
 {
-    // If harmonic pitching is active, do harmonic pitching
-    if (harmonicPitchingActive_)
-    {
-        harmonicPitching();
-    }
-
     volVectorField& activeField = applyForce_ ? forceField_ : forceField;
     if (applyForce_)
     {
@@ -839,7 +879,7 @@ void Foam::fv::actuatorLineSource::addForce
 
     forAll(elements_, i)
     {
-        elements_[i].addForce(UInterp, activeField, scale);
+        elements_[i].addForce(activeField, scale, compressible);
         force_ += elements_[i].force();
     }
 
@@ -849,6 +889,10 @@ void Foam::fv::actuatorLineSource::addForce
     // Add source to eqn
     if (applyForce_)
     {
+        if (compressible)
+        {
+            activeField *= *rhoPtr_;
+        }
         // Check dimensions on force field and correct if necessary
         if (activeField.dimensions() != eqn.dimensions()/dimVolume)
         {
@@ -872,10 +916,12 @@ void Foam::fv::actuatorLineSource::addSup
     const label fieldI
 )
 {
-    // Generate UInterp object to be used for all velocity interpolations
-    const volVectorField& Uin(eqn.psi());
-    interpolationCellPoint<vector> UInterp(Uin);
-    addForce(eqn, UInterp, forceField_, fieldI, 1.0);
+    if (harmonicPitchingActive_)
+    {
+        harmonicPitching();
+    }
+    calculateALData(fieldI);
+    addForce(eqn, forceField_, 1.0, false);
 }
 
 
@@ -890,81 +936,14 @@ void Foam::fv::actuatorLineSource::addSup
     {
         harmonicPitching();
     }
-
-    const volVectorField& U = mesh_.lookupObject<volVectorField>("U");
-    interpolationCellPoint<vector> UInterp(U);
+    calculateALData(fieldI);
 
     word fieldName = fieldNames_[fieldI];
 
     Info<< endl << "Adding " << fieldName << " from " << name_ << endl << endl;
     forAll(elements_, i)
     {
-        elements_[i].calculateForce(UInterp);
         elements_[i].addTurbulence(eqn, fieldName);
-    }
-}
-
-
-void Foam::fv::actuatorLineSource::addForce
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    interpolationCellPoint<vector>& UInterp,
-    volVectorField& forceField,
-    const label fieldI,
-    scalar scale
-)
-{
-    // If harmonic pitching is active, do harmonic pitching
-    if (harmonicPitchingActive_)
-    {
-        harmonicPitching();
-    }
-
-    // Zero out force field
-    //forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-    volVectorField activeField = applyForce_ ? forceField_ : forceField;
-    if (applyForce_)
-    {
-        // Zero out force field
-        activeField.primitiveFieldRef() = vector::zero;
-        activeField.correctBoundaryConditions();
-    }
-
-    // Zero the total force vector
-    force_ = vector::zero;
-
-    forAll(elements_, i)
-    {
-        elements_[i].addForce(rho, UInterp, activeField, scale);
-        force_ += elements_[i].force();
-    }
-
-    Info<< "Force on " << name_ << ": " << endl << force_ << endl << endl;
-
-    // Check dimensions of force field and correct if necessary
-    //if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    //{
-    //    forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    //}
-
-    // Add source to eqn
-    if (applyForce_)
-    {
-        // multiply with local density
-        activeField *= rho;
-        // Check dimensions of force field and correct if necessary
-        if (activeField.dimensions() != eqn.dimensions()/dimVolume)
-        {
-            activeField.dimensions().reset(eqn.dimensions()/dimVolume);
-        }
-        eqn += activeField;
-    }
-
-    // Write performance to file
-    if (Pstream::master() && (writePerf_ || writePerfEnd_))
-    {
-        writePerf();
     }
 }
 
@@ -977,9 +956,12 @@ void Foam::fv::actuatorLineSource::addSup
 )
 {
     // Generate UInterp object to be used for all velocity interpolations
-    const volVectorField& Uin(eqn.psi());
-    interpolationCellPoint<vector> UInterp(Uin);
-    addForce(rho, eqn, UInterp, forceField_, fieldI, 1.0);
+    if (harmonicPitchingActive_)
+    {
+        harmonicPitching();
+    }
+    calculateALData(fieldI);
+    addForce(eqn, forceField_, 1.0, true);
 }
 
 

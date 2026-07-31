@@ -69,9 +69,6 @@ protected:
         // one bladed turbines that act like 3 bladed turbines)
         scalar bladeMultiplier_;
 
-        //- internal time used to perform a loop within the openfoam-step
-        scalar customTime_;
-
         //- Compress the interaction field to improve memory acces
         bool compactField_;
 
@@ -121,14 +118,23 @@ protected:
         //using turbineALSource::rotate;
         void rotateAD(bool updateOnly = false);
 
-        //- Set up a list of neighbor cells for faster force projection
-        void buildInfluenceCells();
-
         //- Apply the forcefield with relaxation
         void updateForceField();
 
         //- Rotate the turbine a specified angle about its axis
         virtual void rotate(scalar radians);
+
+        //- Work to be done first time for calculateALData (allocations)
+        virtual void allocateAL();
+
+        //- Set up a list of neighbor cells for faster force projection
+        virtual void initializeAL();
+
+        //- Set up positions by calling findCells on all actuator line elements
+        virtual void setupPositions(bool includeRing=true);
+
+        //- Calculate the force once velocity is sampled
+        virtual void calculateForces();
 
 
 public:
@@ -154,6 +160,13 @@ public:
 
 
     // Member Functions
+            virtual void addForce
+            (
+                fvMatrix<vector>& eqn,
+                volVectorField& forceField,
+                scalar scale,
+                bool compressible
+            );
 
         // Source term addition
 

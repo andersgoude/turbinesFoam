@@ -39,6 +39,7 @@ SourceFiles
 #include "dictionary.H"
 #include "vector.H"
 #include "actuatorLineElement.H"
+#include "actuatorModelBase.H"
 #include "cellSetOption.H"
 #include "volFieldsFwd.H"
 
@@ -55,7 +56,7 @@ namespace fv
 
 class actuatorLineSource
 :
-    public cellSetOption
+    public actuatorModelBase
 {
 
 protected:
@@ -150,6 +151,15 @@ protected:
         //- Execute harmonic pitching for a single time step
         void harmonicPitching();
 
+        //- calls findCells on all elements
+        virtual void setupPositions();
+
+        //- Work to be done first time for calculateALData
+        virtual void allocateAL();
+
+        //- Calculate the force once velocity is sampled
+        virtual void calculateForces();
+
 
 public:
 
@@ -228,7 +238,12 @@ public:
                 bool useCustomTime = true
             );
 
+            //- sets if force should be applied by the addForce function
+            // directly to the openfoam eqn
             void setApplyForce(bool active);
+
+            //- Calculate projection width epsilon for influence cells
+            void calcInfluenceEpsilon();
 
             //- Setup code for actuatorDisc to speed up calculations
             void allocateInfluenceCells
@@ -255,6 +270,12 @@ public:
             //- Setup code for actuatorDisc to speed up calculations
             void setAzimuthIndex(label azimuthIndex);
 
+            //- Find cells that can be determined without parallel interaction
+            virtual void findCells(bool includeRing = true);
+
+            //- Calculate the force once velocity is sampled
+            void calculateElementForces();
+
         // Evaluation
 
             //- Compute the moment about a given point
@@ -274,10 +295,9 @@ public:
             virtual void addForce
             (
                 fvMatrix<vector>& eqn,
-                interpolationCellPoint<vector>& UInterp,
                 volVectorField& forceField,
-                const label fieldI,
-                scalar scale
+                scalar scale,
+                bool compressible
             );
 
             //- Source term to momentum equation
@@ -292,18 +312,6 @@ public:
             (
                 fvMatrix<scalar>& eqn,
                 const label fieldI
-            );
-
-            //- Source term to compressible momentum equation
-            // addForce assumes that UInterp is already avaiable
-            virtual void addForce
-            (
-                const volScalarField& rho,
-                fvMatrix<vector>& eqn,
-                interpolationCellPoint<vector>& UInterp,
-                volVectorField& forceField,
-                const label fieldI,
-                scalar scale
             );
 
             //- Source term to compressible momentum equation
