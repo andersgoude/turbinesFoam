@@ -96,15 +96,6 @@ protected:
         //- Rotate the turbine a specified angle about its axis
         virtual void rotate(scalar radians);
 
-        //- Set up positions by calling findCells on all actuator line elements
-        virtual void setupPositions(bool includeRing=true);
-
-        //- Work to be done first time for calculateALData
-        virtual void allocateAL();
-
-        //- Calculate the force once velocity is sampled
-        virtual void calculateForces();
-
 
 public:
 
@@ -129,38 +120,35 @@ public:
 
 
     // Member Functions
+
+        // Routines for actuatorModelBase for parallel efficiency
+
+            //- Alloction part of the initial setup
+            virtual void allocateAL();
+
+            //- Set up positions by calling findCells on all
+            //  actuator line elements
+            virtual void setupPositions(bool includeRing);
+
+            //- Calculate the force once velocity is sampled
+            virtual void calculateForces();
+
+        // Source term addition
+
+            //- Add source term to momentum equation
             virtual void addForce
             (
-                fvMatrix<vector>& eqn,
                 volVectorField& forceField,
                 scalar scale,
                 bool compressible
             );
 
-        // Source term addition
-
-            //- Add source term to momentum equation
-            virtual void addSup
-            (
-                fvMatrix<vector>& eqn,
-                const label fieldI
-            );
-
-            //- Add source term to compressible momentum equation
-            virtual void addSup
-            (
-                const volScalarField& rho,
-                fvMatrix<vector>& eqn,
-                const label fieldI
-            );
-
             //- Add source term to turbulence model equation
-            virtual void addSup
+            virtual void addTurbulence
             (
                 fvMatrix<scalar>& eqn,
-                const label fieldI
+                const word fieldName
             );
-
 
         // I-O
 

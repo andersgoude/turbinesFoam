@@ -133,9 +133,6 @@ protected:
         //- Force vector
         vector force_;
 
-        //- Force field (per unit density)
-        volVectorField forceField_;
-
         //- Torque about the axis
         scalar torque_;
 
@@ -150,6 +147,16 @@ protected:
 
         //- Nondimensional torque coefficient
         scalar torqueCoefficient_;
+
+        // Actuator disc specific versions
+        //- Nondimensional power coefficient
+        scalar meanPowerCoefficient_;
+
+        //- Nondimensional drag coefficient
+        scalar meanDragCoefficient_;
+
+        //- Nondimensional torque coefficient
+        scalar meanTorqueCoefficient_;
 
         //- Output file stream
         OFstream* outputFile_;
@@ -231,6 +238,12 @@ public:
 
     // Member Functions
 
+        // Routines for actuatorModelBase for parallel efficiency
+
+            //- Virtual function that each class implements to create
+            //  the field for itself + all child objects
+            virtual void createForceFieldForChildren(const bool compressible);
+
         // Access
 
             //- Return const access to runTime
@@ -241,28 +254,6 @@ public:
 
 
         // Source term addition
-
-            //- Add source term to momentum equation
-            virtual void addSup
-            (
-                fvMatrix<vector>& eqn,
-                const label fieldI
-            );
-
-            //- Add source term to compressible momentum equation
-            virtual void addSup
-            (
-                const volScalarField& rho,
-                fvMatrix<vector>& eqn,
-                const label fieldI
-            );
-
-            //- Add source term to turbulence model equation
-            virtual void addSup
-            (
-                fvMatrix<scalar>& eqn,
-                const label fieldI
-            );
 
 
         // I-O
@@ -281,6 +272,18 @@ public:
 
             //- Print dictionary values
             virtual void printCoeffs() const;
+
+            // return power cofficinet
+            scalar powerCoefficient() const;
+            
+            // return drag coefficient
+            scalar dragCoefficient() const;
+
+            // return power cofficinet
+            scalar meanPowerCoefficient() const;
+            
+            // return drag coefficient
+            scalar meanDragCoefficient() const;
 };
 
 

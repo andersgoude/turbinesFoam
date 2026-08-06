@@ -44,6 +44,7 @@ SourceFiles
 #include "fvMatrices.H"
 #include "interpolationCellPoint.H"
 #include "OFstream.H"
+#include "meshSearch.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -69,6 +70,15 @@ protected:
 
         //- Mesh bounding box
         boundBox meshBoundBox_;
+
+        //- Save force field from this particular object
+        bool writeForceField_;
+
+        //- Pointer to force field (if used) (initialized to null)
+        autoPtr<volVectorField> forceFieldPtr_;
+
+        //- for mesh searches
+        autoPtr<meshSearch> searchEnginePtr;
 
         //- Sample velocities
         List<vector> velocities_;
@@ -112,25 +122,10 @@ protected:
         // Gather epsilon, reduce and distribute to all processors
         void distributeEpsilon();
 
-        //- Alloction part of the initial setup
-        virtual void allocateAL();
-
-        //- Work to be done first time for calculateALData
-        virtual void initializeAL();
-
-        //- Set up positions by calling findCells on all actuator line elements
-        virtual void setupPositions(bool includeRing=true);
-
-        //- Calculate the force once velocity is sampled
-        virtual void calculateForces();
-
-        virtual void addForce
-        (
-            fvMatrix<vector>& eqn,
-            volVectorField& forceField,
-            scalar scale,
-            bool compressible
-        );
+        //- Create local force field if needed
+        //  createAlways = true, for main class, always create the force field
+        //  createAlways = false, only create if writeForceField_ == true
+        void createForceField(const bool createAlways, const bool compressible);
 
 public:
 
@@ -156,10 +151,53 @@ public:
 
     // Member Functions
 
+        // Routines for actuatorModelBase for parallel efficiency
+
+        //- Alloction part of the initial setup
+        virtual void allocateAL();
+
+        //- Work to be done first time for calculateALData
+        virtual void initializeAL();
+
+        //- Set up positions by calling findCells on all actuator line elements
+        virtual void setupPositions(bool includeRing);
+
+        //- Calculate the force once velocity is sampled
+        virtual void calculateForces();
+
+        //- Virtual function that each class implements to create
+        //  the field for itself + all child objects
+        virtual void createForceFieldForChildren(const bool compressible);
+
         // Access
+
+            // to easier collect actuatorLines from several sources
+            const List<actuatorLineSource*>& actuatorLines() const;
 
 
         // Source term addition
+
+            virtual void addForce
+            (
+                volVectorField& forceField,
+                scalar scale,
+                bool compressible
+            );
+
+            //- Source term to turbulence scalars
+            virtual void addTurbulence
+            (
+                fvMatrix<scalar>& eqn,
+                const word fieldName
+            );
+
+            // select proper force field and call addForce
+            void addForceFromChild
+            (
+                volVectorField& forceField,
+                scalar scale,
+                bool compressible
+            );
 
             //- Add source term to momentum equation
             virtual void addSup
@@ -185,6 +223,9 @@ public:
 
 
         // I-O
+
+            //- Read source dictionary
+            virtual bool read(const dictionary& dict);
 
 };
 

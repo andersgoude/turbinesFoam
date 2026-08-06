@@ -65,6 +65,11 @@ void Foam::fv::actuatorModelBase::calculateALData
 
     bool update = false;
 
+    if (searchEnginePtr.valid() == false)
+    {
+        searchEnginePtr.reset(new meshSearch(mesh_));
+    }
+
     // set up lists to hold the cell indices and processor numbers for all
     // points in all elements
     if (initialized_ == false)
@@ -134,7 +139,10 @@ void Foam::fv::actuatorModelBase::calculateALData
             {
                 if (meshBoundBox_.containsInside(centerLocations[i]))
                 {
-                    centerCellI[i] = mesh_.findCell(centerLocations[i]);
+                    centerCellI[i] = searchEnginePtr->findCell
+                    (
+                        centerLocations[i]
+                    );
                     if (centerCellI[i] >= 0)
                     {
                         centerProcI[i] = myProcNo;
@@ -163,6 +171,7 @@ void Foam::fv::actuatorModelBase::calculateALData
     // finding mesh locations of the relevant points
     if (lastTime_ != mesh_.time().value())
     {
+
         setupPositions(true);
         update = true;
         lastTime_ = mesh_.time().value();
@@ -178,6 +187,11 @@ void Foam::fv::actuatorModelBase::calculateALData
 
     if (update)
     {
+        // in case mesh is updated
+        if (mesh_.changing())
+        {
+            searchEnginePtr.reset(new meshSearch(mesh_));
+        }
         // Gather data from the elements
         label index = 0;
         label myProcNo = Pstream::myProcNo();
@@ -205,7 +219,7 @@ void Foam::fv::actuatorModelBase::calculateALData
             {
                 if (meshBoundBox_.containsInside(locations_[i]))
                 {
-                    cellI_[i] = mesh_.findCell(locations_[i]);
+                    cellI_[i] = searchEnginePtr->findCell(locations_[i]);
                     if (cellI_[i] >= 0)
                     {
                         procI_[i] = myProcNo;
@@ -250,7 +264,6 @@ void Foam::fv::actuatorModelBase::calculateALData
             }
         }
         reduce(velocities_, sumOp<List<vector>>());
-
         index = 0;
         forAll(actuatorLines_, i)
         {
@@ -335,6 +348,51 @@ void Foam::fv::actuatorModelBase::distributeEpsilon()
     }
 }
 
+void Foam::fv::actuatorModelBase::createForceField
+(
+    const bool createAlways,
+    const bool compressible
+)
+{
+    // Create only if:
+    //  - creation is forced (top-level class), OR
+    //  - the user requested to store the field
+    if (createAlways == false && writeForceField_ == false)
+    {
+        return;
+    }
+
+    // Already created, do nothing
+    if (forceFieldPtr_.valid())
+    {
+        return;
+    }
+
+
+    // Set force feed dimensions depending on if simulation is compressible
+     const dimensionSet dims = compressible
+         ? dimForce/dimVolume
+         : dimForce/dimVolume/dimDensity;
+
+    forceFieldPtr_.reset
+    (
+        new volVectorField
+        (
+            IOobject
+            (
+                name() + ":force",
+                mesh_.time().timeName(),
+                mesh_,
+                IOobject::NO_READ,
+                writeForceField_ ? IOobject::AUTO_WRITE : IOobject::NO_WRITE
+            ),
+            mesh_,
+            dimensionedVector("force", dims, Zero)
+        )
+    );
+    //forceFieldPtr_().write();
+}
+
 // Dummy functions unless one overloads it
 void Foam::fv::actuatorModelBase::allocateAL()
 {
@@ -352,14 +410,19 @@ void Foam::fv::actuatorModelBase::calculateForces()
 {
 }
 
-void Foam::fv::actuatorModelBase::addForce
+void Foam::fv::actuatorModelBase::createForceFieldForChildren
 (
-    fvMatrix<vector> &eqn,
-    volVectorField &forceField,
-    scalar scale,
-    bool compressible
+    const bool compressible
 )
 {
+    // Create for myself (only if writeForceField_ is true)
+    createForceField(false, compressible);
+}
+
+const List<Foam::fv::actuatorLineSource*>&
+Foam::fv::actuatorModelBase::actuatorLines() const
+{
+    return actuatorLines_;
 }
 
 // * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * * //
@@ -381,6 +444,7 @@ Foam::fv::actuatorModelBase::actuatorModelBase(
       rhoPtr_(nullptr),
       initialized_(false)
 {
+    read(dict);
 }
 
 
@@ -392,13 +456,81 @@ Foam::fv::actuatorModelBase::~actuatorModelBase()
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
+void Foam::fv::actuatorModelBase::addForce
+(
+    volVectorField &forceField,
+    scalar scale,
+    bool compressible
+)
+{
+}
+
+void Foam::fv::actuatorModelBase::addTurbulence(
+    fvMatrix<scalar> &eqn,
+    const word fieldName)
+{
+}
+
+// Used to determine if force should be saved to a local force field or directy
+// to the owners force field. (Do we really need this functionality though?)
+void Foam::fv::actuatorModelBase::addForceFromChild
+(
+    volVectorField& forceField,
+    scalar scale,
+    bool compressible
+)
+{
+    // Select if we should use local force field or input argument
+    const bool useLocal = forceFieldPtr_.valid();
+    volVectorField& target = useLocal ? forceFieldPtr_() : forceField;
+
+    // zero our own force field if we use it
+    if (useLocal)
+    {
+        target.primitiveFieldRef() = vector::zero;
+    }
+
+    addForce(target, scale, compressible);
+
+    // If we use local field, add it to the input field
+    if (useLocal)
+    {
+        forceField += target;
+        // we multiply with rho after, as this is handled by addSup
+        // for the main field
+        if (compressible)
+        {
+            target *= *rhoPtr_;
+        }
+    }
+}
+
 void Foam::fv::actuatorModelBase::addSup
 (
     fvMatrix<vector>& eqn,
     const label fieldI
 )
 {
-    // Should be unique for each turbine type
+    if (initialized_ == false)
+    {
+        createForceField(true, false);
+    }
+    volVectorField& forceField = forceFieldPtr_();
+    forceField.primitiveFieldRef() = vector::zero;
+    
+    // Should not be needed?
+    if (forceField.dimensions() != eqn.dimensions()/dimVolume)
+    {
+        forceField.dimensions().reset(eqn.dimensions()/dimVolume);
+    }
+
+    calculateALData(fieldI);
+
+    addForce(forceField, 1.0, false);
+
+    forceField.correctBoundaryConditions();
+
+    eqn += forceField;
 }
 
 
@@ -409,7 +541,29 @@ void Foam::fv::actuatorModelBase::addSup
     const label fieldI
 )
 {
-    // Should be unique for each turbine type
+    if (initialized_ == false)
+    {
+        createForceField(true, true);
+    }
+    volVectorField& forceField = forceFieldPtr_();
+    forceField.primitiveFieldRef() = vector::zero;
+
+    // Should not be needed?
+    if (forceField.dimensions() != eqn.dimensions()/dimVolume)
+    {
+        forceField.dimensions().reset(eqn.dimensions()/dimVolume);
+    }
+
+    calculateALData(fieldI);
+
+    addForce(forceField, 1.0, true);
+
+    // multiply with local density
+    forceField *= rho;
+
+    forceField.correctBoundaryConditions();
+    
+    eqn += forceField;
 }
 
 
@@ -419,7 +573,28 @@ void Foam::fv::actuatorModelBase::addSup
     const label fieldI
 )
 {
-    // Should be unique for each turbine type
+    calculateALData(fieldI);
+
+    word fieldName = fieldNames_[fieldI];
+    Info<< endl << "Adding " << fieldName << " from " << name_ << endl << endl;
+    addTurbulence(eqn, fieldName);
+}
+
+bool Foam::fv::actuatorModelBase::read(const dictionary& dict)
+{
+    if (cellSetOption::read(dict))
+    {
+        writeForceField_ = coeffs_.lookupOrDefault
+        (
+            "writeForceField",
+            true
+        );
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 // ************************************************************************* //

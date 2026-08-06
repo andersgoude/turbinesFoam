@@ -274,13 +274,12 @@ void Foam::fv::crossFlowTurbineADSource::calculateForces()
 
 void Foam::fv::crossFlowTurbineADSource::addForce
 (
-    fvMatrix<vector> &eqn,
     volVectorField &forceField,
     scalar scale,
     bool compressible
 )
 {
-    // forceField_ should be the average during one revolution here
+    // forceField should be the average during one revolution here
     if (compactField_)
     {
         if (activeForceField_.size() > 0)
@@ -288,17 +287,10 @@ void Foam::fv::crossFlowTurbineADSource::addForce
             activeForceField_ = vector::zero;
         }
     }
-    else
-    {
-        forceField_.primitiveFieldRef() = vector::zero;
-    }
-    forceField_.correctBoundaryConditions();
 
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
+    meanPowerCoefficient_ = 0;
+    meanDragCoefficient_ = 0;
+    meanTorqueCoefficient_ = 0;
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         // Zero out force vector and field
@@ -316,10 +308,9 @@ void Foam::fv::crossFlowTurbineADSource::addForce
                 customTime_[azimuthIndex_],
                 customDeltaT_
             );
-            blades_[i].addForce
+            blades_[i].addForceFromChild
             (
-                eqn,
-                forceField_,
+                forceField,
                 bladeMultiplier_/divisions_,
                 compressible
             );
@@ -339,10 +330,9 @@ void Foam::fv::crossFlowTurbineADSource::addForce
                     customTime_[azimuthIndex_],
                     customDeltaT_
                 );
-                struts_[i].addForce
+                struts_[i].addForceFromChild
                 (
-                    eqn,
-                    forceField_,
+                    forceField,
                     bladeMultiplier_/divisions_,
                     compressible
                 );
@@ -360,10 +350,9 @@ void Foam::fv::crossFlowTurbineADSource::addForce
                 customTime_[azimuthIndex_],
                 customDeltaT_
             );
-            shaft_->addForce
+            shaft_->addForceFromChild
             (
-                eqn,
-                forceField_,
+                forceField,
                 1.0/divisions_,
                 compressible
             );
@@ -384,6 +373,9 @@ void Foam::fv::crossFlowTurbineADSource::addForce
             / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
 
+        meanPowerCoefficient_ += powerCoefficient_;
+        meanDragCoefficient_ += dragCoefficient_;
+        meanTorqueCoefficient_ += torqueCoefficient_;
         // Print performance to terminal
         printPerf();
 
@@ -395,60 +387,26 @@ void Foam::fv::crossFlowTurbineADSource::addForce
             writePerf();
         }
     }
+    meanPowerCoefficient_ /= divisions_;
+    meanDragCoefficient_ /= divisions_;
+    meanTorqueCoefficient_ /= divisions_;
+    
     // When using compressed fields, restore them to the original forceField
-    updateForceField();
-
-    // In case forceField isn't the same, add the local field to the global one
-    if (&forceField != &forceField_)
-    {
-        forceField += forceField_;
-    }
-
+    updateForceField(forceField);
 }
 
-void Foam::fv::crossFlowTurbineADSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-    addForce(eqn, forceField_, 1.0, false);
-    
-    eqn += forceField_;
-}
-
-
-void Foam::fv::crossFlowTurbineADSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-    addForce(eqn, forceField_, 1.0, true);
-
-    // multiply with local density
-    forceField_ *= rho;
-    
-    eqn += forceField_;
-}
-
-
-void Foam::fv::crossFlowTurbineADSource::addSup
+void Foam::fv::crossFlowTurbineADSource::addTurbulence
 (
     fvMatrix<scalar>& eqn,
-    const label fieldI
+    const word fieldName
 )
 {
-    calculateALData(fieldI);
-    // forceField_ should be the average during one revolution here
+    // kField should be the average during one revolution here
     fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
-    kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+    kField *= dimensionedScalar("zero", eqn.dimensions(), 0.0);
     fvMatrix<scalar> kFieldShaft(eqn.psi(), eqn.dimensions());
     kFieldShaft *=
-        dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+        dimensionedScalar("zero", eqn.dimensions(), 0.0);
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         // Add scalar source term from blades
@@ -460,7 +418,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 customTime_[azimuthIndex_],
                 customDeltaT_
             );
-            blades_[i].addSup(kField, fieldI);
+            blades_[i].addTurbulence(kField, fieldName);
         }
 
         if (hasStruts_)
@@ -474,7 +432,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                     customTime_[azimuthIndex_],
                     customDeltaT_
                 );
-                struts_[i].addSup(kField, fieldI);
+                struts_[i].addTurbulence(kField, fieldName);
             }
         }
 
@@ -487,7 +445,7 @@ void Foam::fv::crossFlowTurbineADSource::addSup
                 customTime_[azimuthIndex_],
                 customDeltaT_
             );
-            shaft_->addSup(kFieldShaft, fieldI);
+            shaft_->addTurbulence(kFieldShaft, fieldName);
         }
     }
     eqn += (bladeMultiplier_/divisions_)*kField
@@ -506,10 +464,28 @@ void Foam::fv::crossFlowTurbineADSource::allocateAL()
             cacheInteractions_
         );
     }
+    label nEpsilon = 0;
+    forAll(actuatorLines_, i)
+    {
+        forAll(actuatorLines_[i]->elements(), j)
+        {
+            nEpsilon += actuatorLines_[i]->elements()[j].epsilonCount();
+        }
+    }
+    // if-statement should not be necessary as this runs before
+    // actuatorModelBase changes its size for the farm case.
+    if (nEpsilon > epsilon_.size())
+    {
+        // When running turbineFarmSource, epsilon_ is not allocated
+        // in actuatorModelBase for this class
+        epsilon_.resize(nEpsilon);
+    }
 }
 
-
-void Foam::fv::crossFlowTurbineADSource::updateForceField()
+void Foam::fv::crossFlowTurbineADSource::updateForceField
+(
+    volVectorField &forceField
+)
 {
     if (relaxForceField_)
     {
@@ -518,7 +494,7 @@ void Foam::fv::crossFlowTurbineADSource::updateForceField()
             filteredForceField_ = activeForceField_;
             forAll(localToGlobal_, forceIndex)
             {
-                forceField_[localToGlobal_[forceIndex]] =
+                forceField[localToGlobal_[forceIndex]] +=
                     filteredForceField_[forceIndex];
             }
         }
@@ -529,7 +505,7 @@ void Foam::fv::crossFlowTurbineADSource::updateForceField()
                 filteredForceField_ = activeForceField_;
                 forAll(localToGlobal_, forceIndex)
                 {
-                    forceField_[localToGlobal_[forceIndex]] =
+                    forceField[localToGlobal_[forceIndex]] +=
                         filteredForceField_[forceIndex];
                 }
             }
@@ -541,7 +517,7 @@ void Foam::fv::crossFlowTurbineADSource::updateForceField()
                     filteredForceField_[forceIndex] =
                         (1 - alpha)*filteredForceField_[forceIndex]
                         + alpha*activeForceField_[forceIndex];
-                    forceField_[localToGlobal_[forceIndex]] =
+                    forceField[localToGlobal_[forceIndex]] +=
                         filteredForceField_[forceIndex];
                 }
                 if (relaxGrowthValue_ > 0)
@@ -583,7 +559,7 @@ void Foam::fv::crossFlowTurbineADSource::updateForceField()
         {
             forAll(localToGlobal_, forceIndex)
             {
-                forceField_[localToGlobal_[forceIndex]] =
+                forceField[localToGlobal_[forceIndex]] +=
                     activeForceField_[forceIndex];
             }
         }

@@ -55,7 +55,6 @@ bool Foam::fv::actuatorLineSource::read(const dictionary& dict)
 {
     if (cellSetOption::read(dict))
     {
-
         coeffs_.lookup("fieldNames") >> fieldNames_;
         applied_.setSize(fieldNames_.size(), false);
 
@@ -73,17 +72,6 @@ bool Foam::fv::actuatorLineSource::read(const dictionary& dict)
         harmonicPitchingActive_ = pitchDict.lookupOrDefault("active", false);
         reducedFreq_ = pitchDict.lookupOrDefault("reducedFreq", 0.0);
         pitchAmplitude_ = pitchDict.lookupOrDefault("amplitude", 0.0);
-
-        // Read option for writing forceField
-        bool writeForceField = coeffs_.lookupOrDefault
-        (
-            "writeForceField",
-            true
-        );
-        if (not writeForceField)
-        {
-            forceField_.writeOpt() = IOobject::NO_WRITE;
-        }
 
         if (debug)
         {
@@ -530,8 +518,13 @@ void Foam::fv::actuatorLineSource::harmonicPitching()
 
 //- virtual function setupPositions is protected,
 // but findCells needs to be public
-void Foam::fv::actuatorLineSource::setupPositions()
+void Foam::fv::actuatorLineSource::setupPositions(bool includeRing)
 {
+    // If harmonic pitching is active, do harmonic pitching
+    if (harmonicPitchingActive_)
+    {
+        harmonicPitching();
+    }
     findCells();
 }
 
@@ -560,24 +553,6 @@ Foam::fv::actuatorLineSource::actuatorLineSource
 :
     actuatorModelBase(name, modelType, dict, mesh),
     force_(vector::zero),
-    forceField_
-    (
-        IOobject
-        (
-            "force." + name_,
-            mesh_.time().timeName(),
-            mesh_,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        mesh_,
-        dimensionedVector
-        (
-            "force",
-            dimForce/dimVolume,
-            vector::zero
-        )
-    ),
     writePerf_(coeffs_.lookupOrDefault("writePerf", false)),
     writePerfEnd_(coeffs_.lookupOrDefault("writePerfEnd", false)),
     lastMotionTime_(mesh.time().value()),
@@ -590,10 +565,7 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     {
         createOutputFile();
     }
-    if (forceField_.writeOpt() == IOobject::AUTO_WRITE)
-    {
-        forceField_.write();
-    }
+
     // Calculate end effects
     if (endEffectsActive_)
     {
@@ -827,13 +799,6 @@ const Foam::vector& Foam::fv::actuatorLineSource::force()
     return force_;
 }
 
-
-const Foam::volVectorField& Foam::fv::actuatorLineSource::forceField()
-{
-    return forceField_;
-}
-
-
 PtrList<Foam::fv::actuatorLineElement>& Foam::fv::actuatorLineSource::elements()
 {
     return elements_;
@@ -860,47 +825,22 @@ Foam::vector Foam::fv::actuatorLineSource::moment(vector point)
 
 void Foam::fv::actuatorLineSource::addForce
 (
-    fvMatrix<vector>& eqn,
     volVectorField& forceField,
     scalar scale,
     bool compressible
 )
 {
-    volVectorField& activeField = applyForce_ ? forceField_ : forceField;
-    if (applyForce_)
-    {
-        // Zero out force field
-        activeField.primitiveFieldRef() = vector::zero;
-        activeField.correctBoundaryConditions();
-    }
-
     // Zero the total force vector
     force_ = vector::zero;
-
+    
     forAll(elements_, i)
     {
-        elements_[i].addForce(activeField, scale, compressible);
+        elements_[i].addForce(forceField, scale, compressible);
         force_ += elements_[i].force();
     }
 
     Info<< "Force (per unit density) on " << name_ << ": "
         << endl << force_ << endl << endl;
-
-    // Add source to eqn
-    if (applyForce_)
-    {
-        if (compressible)
-        {
-            activeField *= *rhoPtr_;
-        }
-        // Check dimensions on force field and correct if necessary
-        if (activeField.dimensions() != eqn.dimensions()/dimVolume)
-        {
-            activeField.dimensions().reset(eqn.dimensions()/dimVolume);
-        }
-        eqn += activeField;
-    }
-
 
     // Write performance to file
     if (Pstream::master() && (writePerf_ || writePerfEnd_))
@@ -909,60 +849,16 @@ void Foam::fv::actuatorLineSource::addForce
     }
 }
 
-
-void Foam::fv::actuatorLineSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    if (harmonicPitchingActive_)
-    {
-        harmonicPitching();
-    }
-    calculateALData(fieldI);
-    addForce(eqn, forceField_, 1.0, false);
-}
-
-
-void Foam::fv::actuatorLineSource::addSup
+void Foam::fv::actuatorLineSource::addTurbulence
 (
     fvMatrix<scalar>& eqn,
-    const label fieldI
+    const word fieldName
 )
 {
-    // If harmonic pitching is active, do harmonic pitching
-    if (harmonicPitchingActive_)
-    {
-        harmonicPitching();
-    }
-    calculateALData(fieldI);
-
-    word fieldName = fieldNames_[fieldI];
-
-    Info<< endl << "Adding " << fieldName << " from " << name_ << endl << endl;
     forAll(elements_, i)
     {
         elements_[i].addTurbulence(eqn, fieldName);
     }
 }
-
-
-void Foam::fv::actuatorLineSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    // Generate UInterp object to be used for all velocity interpolations
-    if (harmonicPitchingActive_)
-    {
-        harmonicPitching();
-    }
-    calculateALData(fieldI);
-    addForce(eqn, forceField_, 1.0, true);
-}
-
 
 // ************************************************************************* //

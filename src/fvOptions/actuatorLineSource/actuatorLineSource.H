@@ -88,9 +88,6 @@ protected:
         //- Total force vector from all elements
         vector force_;
 
-        //- Force field from all elements
-        volVectorField forceField_;
-
         //- List of actuator line elements
         PtrList<actuatorLineElement> elements_;
 
@@ -151,16 +148,6 @@ protected:
         //- Execute harmonic pitching for a single time step
         void harmonicPitching();
 
-        //- calls findCells on all elements
-        virtual void setupPositions();
-
-        //- Work to be done first time for calculateALData
-        virtual void allocateAL();
-
-        //- Calculate the force once velocity is sampled
-        virtual void calculateForces();
-
-
 public:
 
     //- Runtime type information
@@ -169,12 +156,12 @@ public:
     // Selectors
 
     //- Return a reference to the selected fvOption model
-    static autoPtr<actuatorLineSource> New
+    /*static autoPtr<actuatorLineSource> New
     (
         const word& name,
         const dictionary& dict,
         const fvMesh& mesh
-    );
+    );*/
 
 
     //- Constructor
@@ -193,13 +180,21 @@ public:
 
     // Member functions
 
+        // Routines for actuatorModelBase for parallel efficiency
+
+            //- calls findCells on all elements
+            virtual void setupPositions(bool includeRing);
+
+            //- Work to be done first time for calculateALData
+            virtual void allocateAL();
+
+            //- Calculate the force once velocity is sampled
+            virtual void calculateForces();
+
         // Access
 
             //- Return const reference to the total force vector
             const vector& force();
-
-            //- Return const reference to the force field
-            const volVectorField& forceField();
 
             //- Return reference to element pointer list
             PtrList<actuatorLineElement>& elements();
@@ -294,32 +289,16 @@ public:
             // addForce assumes that UInterp is already avaiable
             virtual void addForce
             (
-                fvMatrix<vector>& eqn,
                 volVectorField& forceField,
                 scalar scale,
                 bool compressible
             );
 
-            //- Source term to momentum equation
-            virtual void addSup
-            (
-                fvMatrix<vector>& eqn,
-                const label fieldI
-            );
-
             //- Source term to turbulence scalars
-            virtual void addSup
+            virtual void addTurbulence
             (
                 fvMatrix<scalar>& eqn,
-                const label fieldI
-            );
-
-            //- Source term to compressible momentum equation
-            virtual void addSup
-            (
-                const volScalarField& rho,
-                fvMatrix<vector>& eqn,
-                const label fieldI
+                const word fieldName
             );
 };
 

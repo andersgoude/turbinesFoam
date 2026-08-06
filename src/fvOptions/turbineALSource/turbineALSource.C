@@ -257,30 +257,12 @@ Foam::fv::turbineALSource::turbineALSource
     azimuthIndex_(0),
     nBlades_(0),
     freeStreamVelocity_(vector::zero),
-    forceField_
-    (
-        IOobject
-        (
-            "force." + name_,
-            mesh_.time().timeName(),
-            mesh_,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        mesh_,
-        dimensionedVector
-        (
-            "force",
-            dimForce/dimVolume/dimDensity,
-            vector::zero
-        )
-    ),
     frontalArea_(0.0),
     powerCoefficient_(0.0),
     dragCoefficient_(0.0),
     torqueCoefficient_(0.0)
 {
-    forceField_.write();
+    read(dict);
 }
 
 
@@ -292,36 +274,18 @@ Foam::fv::turbineALSource::~turbineALSource()
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-void Foam::fv::turbineALSource::addSup
+void Foam::fv::turbineALSource::createForceFieldForChildren
 (
-    fvMatrix<vector>& eqn,
-    const label fieldI
+    const bool compressible
 )
 {
-    // Should be unique for each turbine type
+    // Create for myself (only if writeForceField_ is true)
+    createForceField(false, compressible);
+    forAll(actuatorLines_, i)
+    {
+        actuatorLines_[i]->createForceFieldForChildren(compressible);
+    }
 }
-
-
-void Foam::fv::turbineALSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    // Should be unique for each turbine type
-}
-
-
-void Foam::fv::turbineALSource::addSup
-(
-    fvMatrix<scalar>& eqn,
-    const label fieldI
-)
-{
-    // Should be unique for each turbine type
-}
-
 
 void Foam::fv::turbineALSource::printCoeffs() const
 {
@@ -400,4 +364,28 @@ bool Foam::fv::turbineALSource::read(const dictionary& dict)
     }
 }
 
+
+scalar Foam::fv::turbineALSource::powerCoefficient() const
+{
+    // Return power coefficient
+    return powerCoefficient_;
+}
+
+scalar Foam::fv::turbineALSource::dragCoefficient() const
+{
+    // Return drag coefficient
+    return dragCoefficient_;
+}
+
+scalar Foam::fv::turbineALSource::meanPowerCoefficient() const
+{
+    // Return power coefficient
+    return meanPowerCoefficient_;
+}
+
+scalar Foam::fv::turbineALSource::meanDragCoefficient() const
+{
+    // Return drag coefficient
+    return meanDragCoefficient_;
+}
 // ************************************************************************* //

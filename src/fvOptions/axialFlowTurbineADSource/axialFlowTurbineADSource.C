@@ -177,6 +177,22 @@ void Foam::fv::axialFlowTurbineADSource::allocateAL()
         // Add source for nacelle actuator line
         nacelle_->allocateInfluenceCells(1, cacheInteractions_);
     }
+    label nEpsilon = 0;
+    forAll(actuatorLines_, i)
+    {
+        forAll(actuatorLines_[i]->elements(), j)
+        {
+            nEpsilon += actuatorLines_[i]->elements()[j].epsilonCount();
+        }
+    }
+    // if-statement should not be necessary as this runs before
+    // actuatorModelBase changes its size for the farm case.
+    if (nEpsilon > epsilon_.size())
+    {
+        // When running turbineFarmSource, epsilon_ is not allocated
+        // in actuatorModelBase for this class
+        epsilon_.resize(nEpsilon);
+    }
 }
 
 void Foam::fv::axialFlowTurbineADSource::initializeAL()
@@ -402,13 +418,12 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
 
 void Foam::fv::axialFlowTurbineADSource::addForce
 (
-    fvMatrix<vector> &eqn,
     volVectorField &forceField,
     scalar scale,
     bool compressible
 )
 {
-    // forceField_ should be the average during one revolution here
+    // forceField should be the average during one revolution here
     if (compactField_)
     {
         if (activeForceField_.size() > 0)
@@ -416,33 +431,26 @@ void Foam::fv::axialFlowTurbineADSource::addForce
             activeForceField_ = vector::zero;
         }
     }
-    else
-    {
-        forceField_.primitiveFieldRef() = vector::zero;
-    }
-    forceField_.correctBoundaryConditions();
 
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
-    
     // tower and nacelle are not rotating,
     // so we only need to calculate the force field once
     if (hasTower_)
     {
         // Add source for tower actuator line
         tower_->setAzimuthIndex(0);
-        tower_->addForce(eqn, forceField_, 1.0, compressible);
+        tower_->addForceFromChild(forceField, 1.0, compressible);
     }
 
     if (hasNacelle_)
     {
         // Add source for tower actuator line
         nacelle_->setAzimuthIndex(0);
-        nacelle_->addForce(eqn, forceField_, 1.0, compressible);
+        nacelle_->addForceFromChild(forceField, 1.0, compressible);
     }
+    
+    meanPowerCoefficient_ = 0;
+    meanDragCoefficient_ = 0;
+    meanTorqueCoefficient_ = 0;
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         // Zero out force vector and field
@@ -465,15 +473,13 @@ void Foam::fv::axialFlowTurbineADSource::addForce
         forAll(blades_, i)
         {
             blades_[i].setAzimuthIndex(azimuthIndex_);
-            blades_[i].addForce
+            blades_[i].addForceFromChild
             (
-                eqn,
-                forceField_,
+                forceField,
                 bladeMultiplier_/divisions_,
                 compressible
             );
-            //forceField_ +=
-            //    (bladeMultiplier_/divisions_)*blades_[i].forceField();
+
             //Info<< "Added blade" << endl;
             force_ += bladeMultiplier_*blades_[i].force();
             bladeMoments_[i] = blades_[i].moment(origin_);
@@ -484,23 +490,20 @@ void Foam::fv::axialFlowTurbineADSource::addForce
         {
             // Add source for hub actuator line
             hub_->setAzimuthIndex(azimuthIndex_);
-            hub_->addForce
+            hub_->addForceFromChild
             (
-                eqn,
-                forceField_,
+                forceField,
                 1.0/divisions_,
                 compressible
             );
-        //    forceField_ += (1.0/divisions_)*hub_->forceField();
+
             force_ += hub_->force();
             moment += hub_->moment(origin_);
         }
 
+        // tower and nacell are both added outside look as they do not move
         if (hasTower_)
         {
-            // Add source for tower actuator line
-            //tower_->addSup(eqn, fieldI);
-            //forceField_ += (1.0/divisions_)*tower_->forceField();
             if (includeTowerDrag_)
             {
                 force_ += tower_->force();
@@ -509,9 +512,6 @@ void Foam::fv::axialFlowTurbineADSource::addForce
 
         if (hasNacelle_)
         {
-            // Add source for tower actuator line
-            //nacelle_->addSup(eqn, fieldI);
-            //forceField_ += (1.0/divisions_)*nacelle_->forceField();
             if (includeNacelleDrag_)
             {
                 force_ += nacelle_->force();
@@ -531,6 +531,9 @@ void Foam::fv::axialFlowTurbineADSource::addForce
             / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
 
+        meanPowerCoefficient_ += powerCoefficient_;
+        meanDragCoefficient_ += dragCoefficient_;
+        meanTorqueCoefficient_ += torqueCoefficient_;
         // Print performance to terminal
         printPerf();
 
@@ -542,62 +545,25 @@ void Foam::fv::axialFlowTurbineADSource::addForce
             writePerf();
         }
     }
+    meanPowerCoefficient_ /= divisions_;
+    meanDragCoefficient_ /= divisions_;
+    meanTorqueCoefficient_ /= divisions_;
 
     // When using compressed fields, restore them to the original forceField
-    updateForceField();
+    updateForceField(forceField);
 }
 
-void Foam::fv::axialFlowTurbineADSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-    
-    addForce(eqn, forceField_, 1.0, false);
-
-    eqn += forceField_;
-}
-
-
-void Foam::fv::axialFlowTurbineADSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-    
-    addForce(eqn, forceField_, 1.0, true);
-
-    // multiply with local density
-    forceField_ *= rho;
-
-    eqn += forceField_;
-}
-
-
-void Foam::fv::axialFlowTurbineADSource::addSup
+void Foam::fv::axialFlowTurbineADSource::addTurbulence
 (
     fvMatrix<scalar>& eqn,
-    const label fieldI
+    const word fieldName
 )
 {
-    calculateALData(fieldI);
-
-    // forceField_ should be the average during one revolution here
+    // kField should be the average during one revolution here
     fvMatrix<scalar> kField(eqn.psi(), eqn.dimensions());
-    kField *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
+    kField *= dimensionedScalar("zero", eqn.dimensions(), 0.0);
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
-        if (endEffectsActive_ and endEffectsModel_ != "liftingLine")
-        {
-            // Calculate end effects based on current velocity field
-            calcEndEffects();
-        }
-        
         // Add scalar source term from blades
         forAll(actuatorLines_, i)
         {
@@ -607,14 +573,16 @@ void Foam::fv::axialFlowTurbineADSource::addSup
                 customTime_[azimuthIndex_],
                 customDeltaT_
             );
-            actuatorLines_[i]->addSup(kField, fieldI);
+            actuatorLines_[i]->addTurbulence(kField, fieldName);
         }
     }
     eqn += (bladeMultiplier_/divisions_)*kField;
 }
 
-
-void Foam::fv::axialFlowTurbineADSource::updateForceField()
+void Foam::fv::axialFlowTurbineADSource::updateForceField
+(
+    volVectorField &forceField
+)
 {
     if (relaxForceField_)
     {
@@ -623,7 +591,7 @@ void Foam::fv::axialFlowTurbineADSource::updateForceField()
             filteredForceField_ = activeForceField_;
             forAll(localToGlobal_, forceIndex)
             {
-                forceField_[localToGlobal_[forceIndex]] =
+                forceField[localToGlobal_[forceIndex]] +=
                     filteredForceField_[forceIndex];
             }
         }
@@ -634,7 +602,7 @@ void Foam::fv::axialFlowTurbineADSource::updateForceField()
                 filteredForceField_ = activeForceField_;
                 forAll(localToGlobal_, forceIndex)
                 {
-                    forceField_[localToGlobal_[forceIndex]] =
+                    forceField[localToGlobal_[forceIndex]] +=
                         filteredForceField_[forceIndex];
                 }
             }
@@ -646,7 +614,7 @@ void Foam::fv::axialFlowTurbineADSource::updateForceField()
                     filteredForceField_[forceIndex] =
                         (1 - alpha)*filteredForceField_[forceIndex]
                         + alpha*activeForceField_[forceIndex];
-                    forceField_[localToGlobal_[forceIndex]] =
+                    forceField[localToGlobal_[forceIndex]] +=
                         filteredForceField_[forceIndex];
                 }
                 if (relaxGrowthValue_ > 0)
@@ -688,7 +656,7 @@ void Foam::fv::axialFlowTurbineADSource::updateForceField()
         {
             forAll(localToGlobal_, forceIndex)
             {
-                forceField_[localToGlobal_[forceIndex]] =
+                forceField[localToGlobal_[forceIndex]] +=
                     activeForceField_[forceIndex];
             }
         }

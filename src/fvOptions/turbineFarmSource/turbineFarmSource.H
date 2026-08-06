@@ -22,20 +22,30 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::fv::axialFlowTurbineALSource
+    Foam::fv::actuatorModelBase
 
 Description
-    Cell based momentum source that represents a axial-flow turbine
+    Base class for all actuator models, with focus on handling parallel
+    computing efficiently
 
 SourceFiles
-    axialFlowTurbineALSource.C
+    actuatorModelBase.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef axialFlowTurbineALSource_H
-#define axialFlowTurbineALSource_H
+#ifndef turbineFarmSource_H
+#define turbineFarmSource_H
 
-#include "turbineALSource.H"
+#include "actuatorModelBase.H"
+#include "axialFlowTurbineALSource.H"
+#include "crossFlowTurbineALSource.H"
+//#include "NamedEnum.H"
+#include "vector.H"
+#include "volFieldsFwd.H"
+#include "fvMesh.H"
+#include "fvMatrices.H"
+#include "interpolationCellPoint.H"
+#include "OFstream.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -45,119 +55,78 @@ namespace fv
 {
 
 /*---------------------------------------------------------------------------*\
-                      Class axialFlowTurbineALSource Declaration
+                      Class turbineFarmSource  Declaration
 \*---------------------------------------------------------------------------*/
 
-class axialFlowTurbineALSource
+class turbineFarmSource
 :
-    public turbineALSource
+    public actuatorModelBase
 {
 
 protected:
 
     // Protected data
 
-        //- Switch for hub present
-        bool hasHub_;
+        //- Axial flow turbines
+        PtrList<axialFlowTurbineALSource> axialFlowTurbines_;
 
-        //- Switch for tower present
-        bool hasTower_;
+        //- Cross flow turbines
+        PtrList<crossFlowTurbineALSource> crossFlowTurbines_;
 
-        //- Switch for nacelle present
-        bool hasNacelle_;
+        //- Axial flow turbine definitions dictionary
+        dictionary axialFlowTurbinesDict_;
 
-        //- Actuator line for hub
-        autoPtr<actuatorLineSource> hub_;
+        //- Cross flow turbine definitions dictionary
+        dictionary crossFlowTurbinesDict_;
 
-        //- Actuator line for tower
-        autoPtr<actuatorLineSource> tower_;
+        //- List of turbine names
+        wordList axialFlowTurbineNames_;
 
-        //- Actuator line for nacelle
-        autoPtr<actuatorLineSource> nacelle_;
+        //- List of turbine names
+        wordList crossFlowTurbineNames_;
 
-        //- Hub dictionary
-        dictionary hubDict_;
+        //- Number of axial flow turbines
+        label nAxialFlowTurbines_;
 
-        //- Tower definitions dictionary
-        dictionary towerDict_;
+        //- Number of axial flow turbines
+        label nCrossFlowTurbines_;
 
-        //- Nacelle dictionary
-        dictionary nacelleDict_;
+        //- Individual axial flow turbine power
+        List<scalar> axialFlowTurbinePowerCoefficients_;
 
-        //- Vertical direction
-        vector verticalDirection_;
+        //- Individual axial flow turbine thrust coefficients
+        List<scalar> axialFlowTurbineDragCoefficients_;
 
-        //- Initial azimuthal direction
-        vector azimuthalDirection_;
+        //- Individual cross flow turbine power
+        List<scalar> crossFlowTurbinePowerCoefficients_;
 
-        //- Initial tilt direction
-        vector tiltAxis_;
+        //- Individual cross flow turbine thrust coefficients
+        List<scalar> crossFlowTurbineDragCoefficients_;
 
-        //- Switch to include tower drag in turbine drag coefficient
-        bool includeTowerDrag_;
-
-        //- Switch to include nacelle drag in turbine drag coefficient
-        bool includeNacelleDrag_;
-
-        //- End effects dictionary
-        dictionary endEffectsDict_;
-
-        //- Switch to activate rotor-level end effects model
-        bool endEffectsActive_;
-
-        //- End effects model name
-        word endEffectsModel_;
-        
-        //- Nblades value to use for end effects calculation
-        label effectiveNBlades_;
-
+        //- Output file stream
+        OFstream* outputFile_;
 
     // Protected Member Functions
 
-        //- Create the co-ordinate system
-        virtual void createCoordinateSystem();
+        //- Create axial flow turbines
+        void createAxialFlowTurbines();
 
-        //- Create actuator lines for blades
-        virtual void createBlades();
+        //- Create cross flow turbines
+        void createCrossFlowTurbines();
 
-        //- Create actuator line for hub
-        void createHub();
-
-        //- Create actuator line for tower
-        void createTower();
-
-        //- Create actuator line for nacelle
-        void createNacelle();
-
-        //- Calculate end end effects at rotor level
-        void calcEndEffects();
-
-        //- Use turbine base class rotate method
-        using turbineALSource::rotate;
-
-        //- Rotate the turbine a specified angle about its axis
-        virtual void rotate(scalar radians);
-
-        //- Rotate the turbine blades and hub about specified axis
-        void rotateBladesAndHub(scalar radians, vector axis);
-
-        //- Tilt the turbine, i.e., rotate about tilt axis
-        void tilt(scalar radians);
-
-        //- Yaw the turbine, i.e., rotate about vertical axis
-        void yaw(scalar radians);
-
+        //- Collect power and thrust data from turbines
+        void getTurbineData();
 
 public:
 
     //- Runtime type information
-    TypeName("axialFlowTurbineALSource");
+    TypeName("turbineFarmSource");
 
 
     // Constructors
 
         //- Construct from components
-        axialFlowTurbineALSource
+        turbineFarmSource
         (
             const word& name,
             const word& modelType,
@@ -167,15 +136,17 @@ public:
 
 
     //- Destructor
-    virtual ~axialFlowTurbineALSource();
+    virtual ~turbineFarmSource();
 
 
     // Member Functions
-
         // Routines for actuatorModelBase for parallel efficiency
 
             //- Alloction part of the initial setup
             virtual void allocateAL();
+
+            //- Work to be done first time for calculateALData
+            virtual void initializeAL();
 
             //- Set up positions by calling findCells on all
             //  actuator line elements
@@ -183,6 +154,13 @@ public:
 
             //- Calculate the force once velocity is sampled
             virtual void calculateForces();
+
+            //- Virtual function that each class implements to create
+            //  the field for itself + all child objects
+            virtual void createForceFieldForChildren(const bool compressible);
+
+        // Access
+
 
         // Source term addition
 
@@ -202,11 +180,21 @@ public:
 
         // I-O
 
+            //- Create the turbine output file
+            virtual void createOutputFile();
+
+            //- Write the turbine performance to file
+            virtual void writePerf();
+
+            //- Write the source properties
+            virtual void writeData(Ostream&) const;
+
             //- Read source dictionary
             virtual bool read(const dictionary& dict);
 
             //- Print dictionary values
             virtual void printCoeffs() const;
+
 };
 
 

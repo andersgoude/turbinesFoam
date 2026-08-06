@@ -784,7 +784,6 @@ void Foam::fv::axialFlowTurbineALSource::calculateForces()
 
 void Foam::fv::axialFlowTurbineALSource::addForce
 (
-    fvMatrix<vector>& eqn,
     volVectorField& forceField,
     scalar scale,
     bool compressible
@@ -798,8 +797,7 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addForce(eqn, forceField_, scale, compressible);
-        forceField_ += blades_[i].forceField();
+        blades_[i].addForceFromChild(forceField, scale, compressible);
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
         moment += bladeMoments_[i];
@@ -808,8 +806,7 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     if (hasHub_)
     {
         // Add source for hub actuator line
-        hub_->addForce(eqn, forceField_, scale, compressible);
-        forceField_ += hub_->forceField();
+        hub_->addForceFromChild(forceField, scale, compressible);
         force_ += hub_->force();
         moment += hub_->moment(origin_);
     }
@@ -817,8 +814,7 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->addForce(eqn, forceField_, scale, compressible);
-        forceField_ += tower_->forceField();
+        tower_->addForceFromChild(forceField, scale, compressible);
         if (includeTowerDrag_)
         {
             force_ += tower_->force();
@@ -828,8 +824,7 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->addForce(eqn, forceField_, scale, compressible);
-        forceField_ += nacelle_->forceField();
+        nacelle_->addForceFromChild(forceField, scale, compressible);
         if (includeNacelleDrag_)
         {
             force_ += nacelle_->force();
@@ -845,6 +840,10 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     dragCoefficient_ = force_ & freeStreamDirection_
                      / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
+    // Only actuatorDisc has different values for these
+    meanPowerCoefficient_ = powerCoefficient_;
+    meanDragCoefficient_ = dragCoefficient_;
+    meanTorqueCoefficient_ = torqueCoefficient_;
     // Print performance to terminal
     printPerf();
 
@@ -856,62 +855,18 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     }
 }
 
-void Foam::fv::axialFlowTurbineALSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-
-    // Zero out force vector and field
-    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-    
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
-    addForce(eqn, forceField_, 1.0, false);
-}
-
-
-void Foam::fv::axialFlowTurbineALSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-
-    // Zero out force vector and field
-    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
-    addForce(eqn, forceField_, 1.0, true);
-}
-
-
-void Foam::fv::axialFlowTurbineALSource::addSup
+void Foam::fv::axialFlowTurbineALSource::addTurbulence
 (
     fvMatrix<scalar>& eqn,
-    const label fieldI
+    const word fieldName
 )
 {
-    calculateALData(fieldI);
-
     // Add scalar source term from blades
     forAll(actuatorLines_, i)
     {
-        actuatorLines_[i]->addSup(eqn, fieldI);
+        actuatorLines_[i]->addTurbulence(eqn, fieldName);
     }
 }
-
 
 void Foam::fv::axialFlowTurbineALSource::printCoeffs() const
 {
@@ -923,7 +878,7 @@ bool Foam::fv::axialFlowTurbineALSource::read(const dictionary& dict)
 {
     if (cellSetOption::read(dict))
     {
-        turbineALSource::read(dict);
+        //turbineALSource::read(dict);
 
         // Get hub information
         hubDict_ = coeffs_.subOrEmptyDict("hub");

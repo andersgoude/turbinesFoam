@@ -162,159 +162,6 @@ void Foam::fv::actuatorLineElement::rotateVector
     vectorToRotate += rotationPoint;
 }
 
-
-/*Foam::label Foam::fv::actuatorLineElement::findCell
-(
-    const point& location
-)
-{
-    label localCell = -1;
-
-    // Fastest path: Same point as last time
-    bool reuse =
-        previousLocationValid_[azimuthIndex_]
-        && magSqr(location - previousLocation_[azimuthIndex_]) < SMALL;
-
-    reduce(reuse, andOp<bool>());
-    if (reuse)
-    {
-        return
-        (
-            Pstream::myProcNo() == previousCenterProcI_[azimuthIndex_]
-          ? previousCenterCellI_[azimuthIndex_]
-          : -1
-        );
-    }
-
-    // Special actuator disc path, use cached index
-    if (centerCellI_.size() > 0)
-    {
-        if (activeRingIndex_ >= 0) // ring sampling active
-        {
-            if (ringProcI_[azimuthIndex_][activeRingIndex_] != -2) // first use
-            {
-                previousCenterProcI_[azimuthIndex_] =
-                    ringProcI_[azimuthIndex_][activeRingIndex_];
-                previousCenterCellI_[azimuthIndex_] =
-                    ringCellI_[azimuthIndex_][activeRingIndex_];
-            }
-            else
-            {
-                ringProcI_[azimuthIndex_][activeRingIndex_] = -1;
-                ringCellI_[azimuthIndex_][activeRingIndex_] = -1;
-            }
-        }
-        else
-        {
-            if (centerCellI_[azimuthIndex_] != -2)
-            {
-                previousCenterProcI_[azimuthIndex_] =
-                    centerProcI_[azimuthIndex_];
-                previousCenterCellI_[azimuthIndex_] =
-                    centerCellI_[azimuthIndex_];
-            }
-            else
-            {
-                centerProcI_[azimuthIndex_] = -1;
-                centerCellI_[azimuthIndex_] = -1;
-            }
-        }
-    }
-    // Fast path:
-    // Previous owner checks cached cell + neighbors
-    bool cacheMiss = false;
-    if
-    (
-        previousCenterProcI_[azimuthIndex_] == Pstream::myProcNo()
-            && previousCenterCellI_[azimuthIndex_] >= 0
-            && previousCenterCellI_[azimuthIndex_] < mesh_.nCells()
-    )
-    {
-        // Check cached cell
-        if (mesh_.pointInCell(location, previousCenterCellI_[azimuthIndex_]))
-        {
-            localCell = previousCenterCellI_[azimuthIndex_];
-        }
-        else
-        {
-            // If not previous cell, check neighboring cells
-            const labelList& nbrs =
-                mesh_.cellCells()[previousCenterCellI_[azimuthIndex_]];
-
-            forAll(nbrs, nbrI)
-            {
-                label testCell = nbrs[nbrI];
-
-                if
-                (
-                    testCell >= 0
-                    && testCell < mesh_.nCells()
-                    && mesh_.pointInCell(location, testCell)
-                )
-                {
-                    localCell = testCell;
-                    break;
-                }
-            }
-            cacheMiss = true;
-        }
-    }
-
-    // Fallback: expensive global/local search
-    if (localCell == -1)
-    {
-        if (meshBoundBox_.containsInside(location))
-        {
-            localCell = mesh_.findCell(location);
-            cacheMiss = true;
-        }
-    }
-
-    // Determine owning processor
-    label ownerProc = (localCell >= 0)
-      ? Pstream::myProcNo() : -1;
-
-    reduce(ownerProc, maxOp<label>());
-
-    // Update cache
-    if (localCell >= 0)
-    {
-        previousCenterCellI_[azimuthIndex_] = localCell;
-        previousCenterCellI_[azimuthIndex_] = Pstream::myProcNo();
-        previousLocation_[azimuthIndex_] = location;
-        previousLocationValid_[azimuthIndex_] = true;
-        if (centerCellI_.size() > 0)
-        {
-            if (cacheMiss)
-            {
-                if (activeRingIndex_ >= 0) // ring sampling active
-                {
-                    ringProcI_[azimuthIndex_][activeRingIndex_] =
-                        previousCenterCellI_[azimuthIndex_];
-                    ringCellI_[azimuthIndex_][activeRingIndex_] =
-                        previousCenterCellI_[azimuthIndex_];
-                }
-                else
-                {
-                    centerProcI_[azimuthIndex_] =
-                        previousCenterCellI_[azimuthIndex_];
-                    centerCellI_[azimuthIndex_] =
-                        previousCenterCellI_[azimuthIndex_];
-                }
-            }
-        }
-    }
-    else
-    {
-        previousCenterCellI_[azimuthIndex_] = -1;
-        previousCenterCellI_[azimuthIndex_] = -1;
-        previousLocationValid_[azimuthIndex_] = false;
-    }
-
-    return localCell;
-}*/
-
-
 void Foam::fv::actuatorLineElement::lookupCoefficients()
 {
     liftCoefficient_[azimuthIndex_] =
@@ -517,18 +364,41 @@ void Foam::fv::actuatorLineElement::applyForceField
     }
     else
     {
-        forAll(mesh_.cells(), cellI)
+        // Check if the sphere ever will be within the mesh
+        // (May not be the case for parallel runs)
+        scalar distSqr = 0.0;
+
+        for (direction dir=0; dir<3; dir++)
         {
-            const vector& c = C[cellI];
-
-            scalar dx = c.x() - px;
-            scalar dy = c.y() - py;
-            scalar dz = c.z() - pz;
-
-            scalar dis = dx*dx + dy*dy + dz*dz;
-            if (dis <= sphereRadiusSqr)
+            if (position_[azimuthIndex_][dir] < meshBoundBox_.min()[dir])
             {
-                force[cellI] += scaledForce*Foam::exp(-dis*invepsilonSqr);
+                scalar d = meshBoundBox_.min()[dir] -
+                           position_[azimuthIndex_][dir];
+                distSqr += d*d;
+            }
+            else if (position_[azimuthIndex_][dir] > meshBoundBox_.max()[dir])
+            {
+                scalar d = position_[azimuthIndex_][dir] -
+                           meshBoundBox_.max()[dir];
+                distSqr += d*d;
+            }
+        }
+        // Only run the loop if sphere may overlap with mesh
+        if (distSqr <= sphereRadiusSqr)
+        {
+            forAll(mesh_.cells(), cellI)
+            {
+                const vector& c = C[cellI];
+
+                scalar dx = c.x() - px;
+                scalar dy = c.y() - py;
+                scalar dz = c.z() - pz;
+
+                scalar dis = dx*dx + dy*dy + dz*dz;
+                if (dis <= sphereRadiusSqr)
+                {
+                    force[cellI] += scaledForce*Foam::exp(-dis*invepsilonSqr);
+                }
             }
         }
     }

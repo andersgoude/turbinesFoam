@@ -670,7 +670,6 @@ void Foam::fv::crossFlowTurbineALSource::calculateForces()
 
 void Foam::fv::crossFlowTurbineALSource::addForce
 (
-    fvMatrix<vector>& eqn,
     volVectorField& forceField,
     scalar scale,
     bool compressible
@@ -685,8 +684,7 @@ void Foam::fv::crossFlowTurbineALSource::addForce
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
-        blades_[i].addForce(eqn, forceField_, 1.0, compressible);
-        forceField_ += blades_[i].forceField();
+        blades_[i].addForceFromChild(forceField, 1.0, compressible);
         //Info<< "Added blade" << endl;
         force_ += blades_[i].force();
         bladeMoments_[i] = blades_[i].moment(origin_);
@@ -698,8 +696,7 @@ void Foam::fv::crossFlowTurbineALSource::addForce
         // Add source for strut actuator lines
         forAll(struts_, i)
         {
-            struts_[i].addForce(eqn, forceField_, 1.0, compressible);
-            forceField_ += struts_[i].forceField();
+            struts_[i].addForceFromChild(forceField, 1.0, compressible);
             force_ += struts_[i].force();
             moment += struts_[i].moment(origin_);
         }
@@ -708,8 +705,7 @@ void Foam::fv::crossFlowTurbineALSource::addForce
     if (hasShaft_)
     {
         // Add source for shaft actuator line
-        shaft_->addForce(eqn, forceField_, 1.0, compressible);
-        forceField_ += shaft_->forceField();
+        shaft_->addForceFromChild(forceField, 1.0, compressible);
         force_ += shaft_->force();
         moment += shaft_->moment(origin_);
     }
@@ -723,6 +719,11 @@ void Foam::fv::crossFlowTurbineALSource::addForce
     dragCoefficient_ = force_ & freeStreamDirection_
                      / (0.5*frontalArea_*magSqr(freeStreamVelocity_));
 
+    // Only actuatorDisc has different values for these
+    meanPowerCoefficient_ = powerCoefficient_;
+    meanDragCoefficient_ = dragCoefficient_;
+    meanTorqueCoefficient_ = torqueCoefficient_;
+
     // Print performance to terminal
     printPerf();
 
@@ -734,64 +735,18 @@ void Foam::fv::crossFlowTurbineALSource::addForce
     }
 }
 
-// Technically, it should be possible to use the same addSup as
-// axialFlowALSource
-void Foam::fv::crossFlowTurbineALSource::addSup
-(
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-
-    // Zero out force vector and field
-    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-    
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
-    addForce(eqn, forceField_, 1.0, false);
-}
-
-
-void Foam::fv::crossFlowTurbineALSource::addSup
-(
-    const volScalarField& rho,
-    fvMatrix<vector>& eqn,
-    const label fieldI
-)
-{
-    calculateALData(fieldI);
-
-    // Zero out force vector and field
-    forceField_ *= dimensionedScalar("zero", forceField_.dimensions(), 0.0);
-
-    // Check dimensions of force field and correct if necessary
-    if (forceField_.dimensions() != eqn.dimensions()/dimVolume)
-    {
-        forceField_.dimensions().reset(eqn.dimensions()/dimVolume);
-    }
-    addForce(eqn, forceField_, 1.0, true);
-}
-
-
-void Foam::fv::crossFlowTurbineALSource::addSup
+void Foam::fv::crossFlowTurbineALSource::addTurbulence
 (
     fvMatrix<scalar>& eqn,
-    const label fieldI
+    const word fieldName
 )
 {
-    calculateALData(fieldI);
-
     // Add scalar source term from blades
     forAll(actuatorLines_, i)
     {
-        actuatorLines_[i]->addSup(eqn, fieldI);
+        actuatorLines_[i]->addTurbulence(eqn, fieldName);
     }
 }
-
 
 void Foam::fv::crossFlowTurbineALSource::printCoeffs() const
 {
@@ -803,7 +758,7 @@ bool Foam::fv::crossFlowTurbineALSource::read(const dictionary& dict)
 {
     if (cellSetOption::read(dict))
     {
-        turbineALSource::read(dict);
+        //turbineALSource::read(dict);
 
         // Get struts information
         strutsDict_ = coeffs_.subOrEmptyDict("struts");
