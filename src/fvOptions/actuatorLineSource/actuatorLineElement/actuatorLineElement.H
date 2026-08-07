@@ -264,8 +264,17 @@ protected:
         //- ActuatorDisc - pointer to the compact field of the owner class
         vectorField *activeForceFieldPtr_;
 
-        //- the current azimuthIndex to use for the influenceCells
+        //- The current azimuthIndex to use for the influenceCells
         label azimuthIndex_;
+
+        //- Factor for determining epsilon based on chord lengt
+        scalar chordFactor_;
+
+        //- Factor for determining epsilon based on drag coefficient
+        scalar dragFactor_;
+
+        //- Factor for determining epsilon based on cell volume
+        scalar meshFactor_;
 
 
     // Protected Member Functions
@@ -429,6 +438,15 @@ public:
 
             //- Return the number of epsilon values stored
             label epsilonCount() const;
+
+            //- Return chord factor for determining epsilon
+            const scalar& chordFactor() const;
+
+            //- Return chord factor for determining epsilon
+            const scalar& dragFactor() const;
+
+            //- Return chord factor for determining epsilon
+            const scalar& meshFactor() const;
             
             //- collect the locations of the actuator line element
             // for velocity sampling
@@ -467,7 +485,7 @@ public:
             ) const;
 
             //- Calculate projection width epsilon for influence cells
-            void calcInfluenceEpsilon();
+            void calcInfluenceEpsilon(scalar dragCoefficient);
 
 
             //- distribute epsilon of the actuator line elements
@@ -553,7 +571,7 @@ public:
                 vectorField& activePositions,
                 vectorField& activeForceField
             );
-            
+
             //- allocate the list of influence cells (for actuator disc)
             void setAzimuthIndex(label azimuthIndex);
 

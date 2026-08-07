@@ -176,6 +176,84 @@ protected:
         //- Individual blade moments about turbine origin
         List<vector> bladeMoments_;
 
+    // variables used to automatically detect active region for
+    // actuator line simulations
+    
+        //- Maximum possible drag coefficient for cell list creation
+        scalar maxDragCoefficient_;
+
+        //- lower axial point of cylinder (relative to center)
+        scalar cylMin_;
+
+        //- upper axial point of cylinder (relative to center)
+        scalar cylMax_;
+
+        //- cylinder ratiud
+        scalar cylRadius_;
+
+        //- Maximum chord length of any element
+        scalar chordMax_;
+
+        //- largest value of chord length * chordFactor for any element
+        scalar epsilonLiftMax_;
+
+        //- largest value of chord length * dragFactor for any element
+        scalar dragMax_;
+
+        //- largest value of meshFactor for any element
+        scalar meshFactorMax_;
+
+
+    // Actuator disc variables
+
+        //- number of divisions per revolution
+        label divisions_;
+        
+        //- Run the force calculation loop additional times to allow
+        // dynamic stall models with hysteresis develop the solution
+        // 1 additional loop should be sufficient
+        label dynStallLoop_;
+        
+        //- Multiply the force with this value (basically allows to set up
+        // one bladed turbines that act like 3 bladed turbines)
+        scalar bladeMultiplier_;
+
+        //- Compress the interaction field to improve memory acces
+        bool compactField_;
+
+        //- Cache intearction point list to avoid unnecessary iterations
+        bool cacheInteractions_;
+
+        //- Cached positions for more compact disc operations
+        labelList localToGlobal_;
+
+        //- Cached positions for more compact disc operations
+        vectorField activePositions_;
+
+        //- ForceField corresponding to the compact field
+        vectorField activeForceField_;
+
+        //- ForceField after relaxation is applied
+        vectorField filteredForceField_;
+
+        //- Apply relaxation to force field
+        bool relaxForceField_;
+
+        //- Starting iteration for relaxation
+        label relaxStartTime_;
+
+        //- Relaxation value (note equation is 1/(1+relaxValue_))
+        scalar relaxValue_;
+
+        //- Relaxation growth factor (relaxation += relaxGrowthValue_)
+        scalar relaxGrowthValue_;
+
+        //- Only grow if relative difference is larger than threshold
+        scalar relaxGrowthThreshold_;
+
+        //- Peak value for relaxation
+        scalar relaxMaxValue_;
+
 
     // Protected Member Functions
 
@@ -212,6 +290,26 @@ protected:
 
         //- Print performance
         virtual void printPerf();
+
+        //- Determine minimum cylinder that fits all actuator line elements
+        void determineBoundingCylinder(PtrList<actuatorLineSource> &lines);
+
+        //- Determine maximum cell volume within the cylinder
+        scalar maxCellVolumeInCylinder();
+
+        //- Create the list of influence cells for one angle
+        void addPointsInCylinder
+        (
+            scalar maxVol,
+            labelList& globalToLocal,
+            label& nActive
+        );
+
+        //- Apply the forcefield for actuator line
+        void updateForceFieldAL(volVectorField &forceField);
+
+        //- Apply the forcefield for actuator disc with relaxation
+        void updateForceFieldAD(volVectorField &forceField);
 
 
 public:

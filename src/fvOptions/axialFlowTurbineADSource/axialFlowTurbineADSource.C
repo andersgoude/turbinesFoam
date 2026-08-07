@@ -62,40 +62,14 @@ Foam::fv::axialFlowTurbineADSource::axialFlowTurbineADSource
     const fvMesh& mesh
 )
 :
-    axialFlowTurbineALSource(name, modelType, dict, mesh),
-    firstUse_(true)
+    axialFlowTurbineALSource(name, modelType, dict, mesh)
 {
-    read(dict);
     customTime_ = mesh.time().value();
     rotateAD(true);
 
     // override the nBlades value for the end effects calculation
     // if bladeMultiplier is used
     effectiveNBlades_ = bladeMultiplier_*nBlades_;
-    forAll(blades_, i)
-    {
-        blades_[i].setApplyForce(false);
-    }
-
-    if (hasHub_)
-    {
-        hub_->setApplyForce(false);
-    }
-
-    if (hasTower_)
-    {
-        tower_->setApplyForce(false);
-    }
-
-    if (hasNacelle_)
-    {
-        nacelle_->setApplyForce(false);
-    }
-    //buildInfluenceCells();
-    // reset these after buildInfluenceCells
-    customTime_ = mesh.time().value();
-    baseAngleDeg_ = 0;
-    angleDeg_[0] = 0;
 }
 
 
@@ -206,26 +180,26 @@ void Foam::fv::axialFlowTurbineADSource::initializeAL()
     if (hasTower_)
     {
         tower_->setAzimuthIndex(0); // not really needed, remove later
-        tower_->calcInfluenceEpsilon();
+        tower_->calcInfluenceEpsilon(maxDragCoefficient_);
     }
 
     if (hasNacelle_)
     {
         nacelle_->setAzimuthIndex(0); // not really needed, remove later
-        nacelle_->calcInfluenceEpsilon();
+        nacelle_->calcInfluenceEpsilon(maxDragCoefficient_);
     }
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         forAll(blades_, i)
         {
             blades_[i].setAzimuthIndex(azimuthIndex_);
-            blades_[i].calcInfluenceEpsilon();
+            blades_[i].calcInfluenceEpsilon(maxDragCoefficient_);
         }
 
         if (hasHub_)
         {
             hub_->setAzimuthIndex(azimuthIndex_);
-            hub_->calcInfluenceEpsilon();
+            hub_->calcInfluenceEpsilon(maxDragCoefficient_);
         }
         rotateAD();
     }
@@ -323,7 +297,6 @@ void Foam::fv::axialFlowTurbineADSource::initializeAL()
 
     baseAngleDeg_ = 0;
     angleDeg_[0] = 0;
-    firstUse_ = false;
 }
 
 void Foam::fv::axialFlowTurbineADSource::setupPositions(bool includeRing)
@@ -550,7 +523,7 @@ void Foam::fv::axialFlowTurbineADSource::addForce
     meanTorqueCoefficient_ /= divisions_;
 
     // When using compressed fields, restore them to the original forceField
-    updateForceField(forceField);
+    updateForceFieldAD(forceField);
 }
 
 void Foam::fv::axialFlowTurbineADSource::addTurbulence
@@ -577,147 +550,6 @@ void Foam::fv::axialFlowTurbineADSource::addTurbulence
         }
     }
     eqn += (bladeMultiplier_/divisions_)*kField;
-}
-
-void Foam::fv::axialFlowTurbineADSource::updateForceField
-(
-    volVectorField &forceField
-)
-{
-    if (relaxForceField_)
-    {
-        if (filteredForceField_.size() == 0)
-        {
-            filteredForceField_ = activeForceField_;
-            forAll(localToGlobal_, forceIndex)
-            {
-                forceField[localToGlobal_[forceIndex]] +=
-                    filteredForceField_[forceIndex];
-            }
-        }
-        else
-        {
-            if (mesh_.time().value() < relaxStartTime_)
-            {
-                filteredForceField_ = activeForceField_;
-                forAll(localToGlobal_, forceIndex)
-                {
-                    forceField[localToGlobal_[forceIndex]] +=
-                        filteredForceField_[forceIndex];
-                }
-            }
-            else
-            {
-                scalar alpha = 1.0/(1.0 + relaxValue_);
-                forAll(localToGlobal_, forceIndex)
-                {
-                    filteredForceField_[forceIndex] =
-                        (1 - alpha)*filteredForceField_[forceIndex]
-                        + alpha*activeForceField_[forceIndex];
-                    forceField[localToGlobal_[forceIndex]] +=
-                        filteredForceField_[forceIndex];
-                }
-                if (relaxGrowthValue_ > 0)
-                {
-                    if (relaxGrowthThreshold_ > 0)
-                    {
-                        // Difference field
-                        vectorField diff =
-                            activeForceField_ - filteredForceField_;
-
-                        // L2 norm of the difference
-                        scalar diffL2 = Foam::sqrt(Foam::sum(magSqr(diff)));
-
-                        // L2 norm of the reference field
-                        scalar refL2 =
-                            Foam::sqrt(Foam::sum(magSqr(filteredForceField_)));
-
-                        scalar relativeChange = diffL2 / (refL2 + SMALL);
-                        if (relativeChange > relaxGrowthThreshold_)
-                        {
-                            relaxValue_ += relaxGrowthValue_;
-                        }
-                    }
-                    else
-                    {
-                        relaxValue_ += relaxGrowthValue_;
-                    }
-                }
-                if (relaxValue_ < relaxMaxValue_)
-                {
-                    relaxValue_ = relaxMaxValue_;
-                }
-            }
-        }
-    }
-    else
-    {
-        if (activeForceField_.size() > 0)
-        {
-            forAll(localToGlobal_, forceIndex)
-            {
-                forceField[localToGlobal_[forceIndex]] +=
-                    activeForceField_[forceIndex];
-            }
-        }
-    }
-}
-
-bool Foam::fv::axialFlowTurbineADSource::read(const dictionary& dict)
-{
-    if (cellSetOption::read(dict))
-    {
-        //crossFlowTurbineALSource::read(dict);
-
-        // Get number of divisions
-        divisions_ = coeffs_.lookupOrDefault("divisions", 180);
-        
-        // Get number of divisions
-        dynStallLoop_ = coeffs_.lookupOrDefault("dynStallLoop", 1);
-        
-        // Get blade multiplier
-        bladeMultiplier_ = coeffs_.lookupOrDefault("bladeMultiplier", 1);
-
-        // Get compact field
-        compactField_ = coeffs_.lookupOrDefault("compactField", true);
-
-        // Get cache interactions field
-        cacheInteractions_ = coeffs_.lookupOrDefault("cacheInteractions", true);
-
-        // For simplicity, ensure that cacheInteractions cannot be true when
-        // compactField is false, to avoid having to implement this path
-        // as the interctions cache is the memory consuming part
-        if (compactField_ == false)
-        {
-            cacheInteractions_ = false;
-        }
-
-        // Get if we should apply relaxation to the force field
-        relaxForceField_ = coeffs_.lookupOrDefault("relaxForceField", false);
-        relaxStartTime_ = coeffs_.lookupOrDefault("relaxStartTime", 0);
-        relaxValue_ = coeffs_.lookupOrDefault("relaxStartValue", 0.3);
-        relaxGrowthValue_ = coeffs_.lookupOrDefault("relaxGrowthValue", 0.02);
-        relaxGrowthThreshold_ =
-            coeffs_.lookupOrDefault("relaxGrowthThreshold", 0.0);
-        relaxMaxValue_ = coeffs_.lookupOrDefault("relaxMaxValue", 0.02);
-
-        if (debug)
-        {
-            Info << "relaxForceField_ " << relaxForceField_
-                 << " relaxStartTime_ " << relaxStartTime_
-                 << " relaxValue_ " << relaxValue_
-                 << " relaxGrowthValue_ " << relaxGrowthValue_
-                 << " relaxGrowthThreshold_ " << relaxGrowthThreshold_
-                 << " relaxMaxValue_ " << relaxMaxValue_
-                 << endl;
-        }
-
-        return true;
-    }
-    else
-    {
-        return false;
-    }
 }
 
 // ************************************************************************* //

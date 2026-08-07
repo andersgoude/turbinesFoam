@@ -57,57 +57,6 @@ protected:
 
     // Protected data
 
-        //- number of divisions per revolution
-        label divisions_;
-        
-        //- Run the force calculation loop additional times to allow
-        // dynamic stall models with hysteresis develop the solution
-        // 1 additional loop should be sufficient
-        label dynStallLoop_;
-        
-        //- Multiply the force with this value (basically allows to set up
-        // one bladed turbines that act like 3 bladed turbines)
-        scalar bladeMultiplier_;
-
-        //- Compress the interaction field to improve memory acces
-        bool compactField_;
-
-        //- Cache intearction point list to avoid unnecessary iterations
-        bool cacheInteractions_;
-
-        //-first time step indicator, used to determine when to build cells
-        bool firstUse_;
-
-        //- Cached positions for more compact disc operations
-        labelList localToGlobal_;
-
-        //- Cached positions for more compact disc operations
-        vectorField activePositions_;
-
-        //- ForceField corresponding to the compact field
-        vectorField activeForceField_;
-
-        //- ForceField after relaxation is applied
-        vectorField filteredForceField_;
-
-        //- Apply relaxation to force field
-        bool relaxForceField_;
-
-        //- Starting iteration for relaxation
-        label relaxStartTime_;
-
-        //- Relaxation value (note equation is 1/(1+relaxValue_))
-        scalar relaxValue_;
-
-        //- Relaxation growth factor (relaxation += relaxGrowthValue_)
-        scalar relaxGrowthValue_;
-
-        //- Only grow if relative difference is larger than threshold
-        scalar relaxGrowthThreshold_;
-
-        //- Peak value for relaxation
-        scalar relaxMaxValue_;
-
 
     // Protected Member Functions
 
@@ -117,9 +66,6 @@ protected:
         //- Use turbine base class rotate method
         //using turbineALSource::rotate;
         void rotateAD(bool updateOnly = false);
-
-        //- Apply the forcefield with relaxation
-        void updateForceField(volVectorField &forceField);
 
         //- Rotate the turbine a specified angle about its axis
         virtual void rotate(scalar radians);
@@ -182,9 +128,6 @@ public:
             );
 
         // I-O
-
-            //- Read source dictionary
-            virtual bool read(const dictionary& dict);
 };
 
 

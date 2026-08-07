@@ -556,8 +556,7 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     writePerf_(coeffs_.lookupOrDefault("writePerf", false)),
     writePerfEnd_(coeffs_.lookupOrDefault("writePerfEnd", false)),
     lastMotionTime_(mesh.time().value()),
-    endEffectsActive_(false),
-    applyForce_(true)
+    endEffectsActive_(false)
 {
     read(dict_);
     createElements();
@@ -702,17 +701,14 @@ void Foam::fv::actuatorLineSource::setCustomTime
 }
 
 
-void Foam::fv::actuatorLineSource::setApplyForce(bool active)
-{
-    applyForce_ = active;
-}
-
-
-void Foam::fv::actuatorLineSource::calcInfluenceEpsilon()
+void Foam::fv::actuatorLineSource::calcInfluenceEpsilon
+(
+    scalar dragCoefficient
+)
 {
     forAll(elements_, i)
     {
-        elements_[i].calcInfluenceEpsilon();
+        elements_[i].calcInfluenceEpsilon(dragCoefficient);
     }
 }
 

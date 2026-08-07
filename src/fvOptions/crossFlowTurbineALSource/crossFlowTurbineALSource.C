@@ -660,6 +660,103 @@ void Foam::fv::crossFlowTurbineALSource::allocateAL()
     }
 }
 
+void Foam::fv::crossFlowTurbineALSource::initializeAL()
+{
+    // Only needed of compactField_ is true
+    if (compactField_ == false)
+    {
+        return;
+    }
+
+    // Determine a cylinder with same axis as turbine that fits
+    // all blade elements
+    determineBoundingCylinder(blades_);
+    if (hasStruts_)
+    {
+        determineBoundingCylinder(struts_);
+    }
+
+    // Next step is to find the maximum volume of any cell within this region
+    // This is to calculate the largest possible epsilon value
+
+    scalar maxVol  = maxCellVolumeInCylinder();
+    if (maxVol < 0)
+    {
+        Info<< "Failed to find cells in turbine region, "
+            << "Defaulting to compactField = false" << endl;
+        compactField_ = false;
+        return;
+    }
+
+    labelList globalToLocal(mesh_.nCells(), -1);
+    label nActive = 0;
+
+    addPointsInCylinder(maxVol, globalToLocal, nActive);
+
+    // unnecessary to also build for the blades, but simplfies code
+    // and should be very minor difference in time
+    forAll(actuatorLines_, i)
+    {
+        actuatorLines_[i]->calcInfluenceEpsilon(maxDragCoefficient_);
+    }
+    distributeEpsilon();
+
+    // Here, we put hub, nacelle and tower in the same region
+    // could be separated for additional speed improvement, but this
+    // will likely only be very minor difference
+    if (hasShaft_)
+    {
+        // Add source for tower actuator line
+        shaft_->constructInfluenceCellList
+        (
+            0,
+            globalToLocal,
+            nActive
+        );
+    }
+
+    label localCells = mesh_.nCells();
+    label nCellsGlobal = localCells;
+    reduce(nCellsGlobal, sumOp<label>());
+
+    label nActiveGlobal = nActive;
+    reduce(nActiveGlobal, sumOp<label>());
+    // Print only once
+    if (Pstream::master())
+    {
+        Info<< "Selected cylinder from " << cylMin_ << " to " << cylMax_
+            << " with radius " << cylRadius_ << " for " << name_
+            << endl;
+        Info<< "Active cells participating in the force field: "
+            << nActiveGlobal << " of " << nCellsGlobal << endl;
+    }
+
+    activePositions_.setSize(nActive);
+    activeForceField_.setSize(nActive, Zero);
+    localToGlobal_.setSize(nActive);
+
+    const vectorField& C = mesh_.C();
+    forAll(globalToLocal, globalI)
+    {
+        label localI = globalToLocal[globalI];
+
+        if (localI != -1)
+        {
+            activePositions_[localI] = C[globalI];
+            localToGlobal_[localI] = globalI;
+        }
+    }
+
+    forAll(actuatorLines_, i)
+    {
+        actuatorLines_[i]->setCompactFields
+        (
+            activePositions_,
+            activeForceField_
+        );
+    }
+}
+
 void Foam::fv::crossFlowTurbineALSource::calculateForces()
 {
     forAll(actuatorLines_, i)
@@ -675,6 +772,15 @@ void Foam::fv::crossFlowTurbineALSource::addForce
     bool compressible
 )
 {
+    // forceField should be the average during one revolution here
+    if (compactField_)
+    {
+        if (activeForceField_.size() > 0)
+        {
+            activeForceField_ = vector::zero;
+        }
+    }
+
     // Zero out force vector
     force_ *= 0;
 
@@ -733,6 +839,9 @@ void Foam::fv::crossFlowTurbineALSource::addForce
     {
         writePerf();
     }
+
+    // When using compressed fields, restore them to the original forceField
+    updateForceFieldAL(forceField);
 }
 
 void Foam::fv::crossFlowTurbineALSource::addTurbulence

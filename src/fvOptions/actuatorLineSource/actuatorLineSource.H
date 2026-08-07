@@ -124,9 +124,6 @@ protected:
         //- Switch for correcting end effects
         bool endEffectsActive_;
 
-        //- Apply the force directly from this function
-        bool applyForce_;
-
 
     // Protected Member Functions
 
@@ -233,12 +230,8 @@ public:
                 bool useCustomTime = true
             );
 
-            //- sets if force should be applied by the addForce function
-            // directly to the openfoam eqn
-            void setApplyForce(bool active);
-
             //- Calculate projection width epsilon for influence cells
-            void calcInfluenceEpsilon();
+            void calcInfluenceEpsilon(scalar dragCoefficient);
 
             //- Setup code for actuatorDisc to speed up calculations
             void allocateInfluenceCells

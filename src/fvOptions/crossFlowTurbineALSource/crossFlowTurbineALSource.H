@@ -126,6 +126,9 @@ public:
             //- Alloction part of the initial setup
             virtual void allocateAL();
 
+            //- Work to be done first time for calculateALData
+            virtual void initializeAL();
+
             //- Set up positions by calling findCells on all
             //  actuator line elements
             virtual void setupPositions(bool includeRing);

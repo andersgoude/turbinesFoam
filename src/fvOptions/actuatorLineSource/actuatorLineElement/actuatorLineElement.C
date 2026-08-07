@@ -117,6 +117,15 @@ void Foam::fv::actuatorLineElement::read()
         Info<< "writePerf: " << writePerf_ << endl;
         Info<< "writePerfEnd: " << writePerfEnd_ << endl;
     }
+
+    // Lookup Gaussian coeffs from profileData dict if present
+    dictionary GaussianCoeffs = profileData_.dict().subOrEmptyDict
+    (
+        "GaussianCoeffs"
+    );
+    chordFactor_ = GaussianCoeffs.lookupOrDefault("chordFactor", 0.25);
+    dragFactor_ = GaussianCoeffs.lookupOrDefault("dragFactor", 1.0);
+    meshFactor_ = GaussianCoeffs.lookupOrDefault("meshFactor", 2.0);
 }
 
 
@@ -175,21 +184,12 @@ void Foam::fv::actuatorLineElement::lookupCoefficients()
 
 void Foam::fv::actuatorLineElement::calcProjectionEpsilon()
 {
-    // Lookup Gaussian coeffs from profileData dict if present
-    dictionary GaussianCoeffs = profileData_.dict().subOrEmptyDict
-    (
-        "GaussianCoeffs"
-    );
-    scalar chordFactor = GaussianCoeffs.lookupOrDefault("chordFactor", 0.25);
-    scalar dragFactor = GaussianCoeffs.lookupOrDefault("dragFactor", 1.0);
-    scalar meshFactor = GaussianCoeffs.lookupOrDefault("meshFactor", 2.0);
-
     // Provide ideal epsilon target for lift based on chord length
-    scalar epsilonLift = chordFactor*chordLength_;
+    scalar epsilonLift = chordFactor_*chordLength_;
 
     // Epsilon based on drag/momentum thickness
     scalar epsilonDrag =
-        dragFactor*dragCoefficient_[azimuthIndex_]*chordLength_/2.0;
+        dragFactor_*dragCoefficient_[azimuthIndex_]*chordLength_/2.0;
 
     // Threshold is based on lift or drag, whichever is larger
     scalar epsilonThreshold = Foam::max(epsilonLift, epsilonDrag);
@@ -202,7 +202,7 @@ void Foam::fv::actuatorLineElement::calcProjectionEpsilon()
     {
         // Projection width based on local cell size (from Troldborg (2008))
         epsilonMesh = 2.0*Foam::cbrt(V[centerCellI_[azimuthIndex_]]);
-        epsilonMesh *= meshFactor; // Cell could have non-unity aspect ratio
+        epsilonMesh *= meshFactor_; // Cell could have non-unity aspect ratio
 
         if (epsilonMesh > epsilonThreshold)
         {
@@ -730,15 +730,6 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity()
     vector localVelocitySum = vector::zero;
     label localNSamples = 0;
     
-    // Check that the center cell is valid, if not, position is not in the mesh
-    /*if (centerCellI_[azimuthIndex_] < 0)
-    {
-        // Raise fatal error since inflow velocity cannot be detected
-        FatalErrorIn("void actuatorLineElement::calculateForce()")
-            << "Inflow velocity point for " << name_ << " Position: "
-            << position_[azimuthIndex_] << " not found in mesh"
-            << abort(FatalError);
-    }*/
     // If the flow is sampled by using a circle around position_, then
     // overwrite the inflow velocity with the mean value over all circle points
     if (velocitySampleRadius_ > 0.0)
@@ -756,16 +747,6 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity()
         }
         // Set inflow Velocity as the mean value
         inflowVelocity_ = 1.0 / localNSamples * localVelocitySum;
-
-        // If inflow velocity is not detected, position is not in the mesh
-        /*if (localNSamples == 0)
-        {
-            // Raise fatal error since inflow velocity cannot be detected
-            FatalErrorIn("void actuatorLineElement::calculateForce()")
-                << "Inflow velocity point for " << name_ << " Position: "
-                << position_ << " not found in mesh"
-                << abort(FatalError);
-        }*/
     }
 }
 
@@ -1316,6 +1297,21 @@ label Foam::fv::actuatorLineElement::epsilonCount() const
     return epsilon_.size();
 }
 
+const scalar &Foam::fv::actuatorLineElement::chordFactor() const
+{
+    return chordFactor_;
+}
+
+const scalar &Foam::fv::actuatorLineElement::dragFactor() const
+{
+    return dragFactor_;
+}
+
+const scalar &Foam::fv::actuatorLineElement::meshFactor() const
+{
+    return meshFactor_;
+}
+
 void Foam::fv::actuatorLineElement::collectLocationData
 (
     List<label> &globalCellI,
@@ -1415,10 +1411,13 @@ void Foam::fv::actuatorLineElement::collectEpsilonData
     index += nCenter;
 }
 
-void Foam::fv::actuatorLineElement::calcInfluenceEpsilon()
+void Foam::fv::actuatorLineElement::calcInfluenceEpsilon
+(
+    scalar dragCoefficient
+)
 {
     // Calculate projection width
-    dragCoefficient_ = 4; // Should realistically not be larger than this
+    dragCoefficient_ = dragCoefficient;
     calcProjectionEpsilon();
 }
 
