@@ -93,13 +93,35 @@ void Foam::fv::actuatorLineElement::read()
     }
 
     // Read nu from object registry
-    const dictionary& transportProperties = mesh_.lookupObject<IOdictionary>
-    (
-        "transportProperties"
-    );
-    dimensionedScalar nu;
-    transportProperties.lookup("nu") >> nu;
-    nu_ = nu.value();
+    if (mesh_.foundObject<IOdictionary>("transportProperties"))
+    {
+        const dictionary& transportProperties = mesh_.lookupObject<IOdictionary>
+        (
+            "transportProperties"
+        );
+        dimensionedScalar nu;
+        transportProperties.lookup("nu") >> nu;
+        nu_ = nu.value();
+    }
+    else if (mesh_.foundObject<volScalarField>("thermo:mu"))
+    {
+        // get the dynamic viscosity and density fields
+        const volScalarField& mu =
+            mesh_.lookupObject<volScalarField>("thermo:mu");
+        const volScalarField& rho =
+            mesh_.lookupObject<volScalarField>("rho");
+
+        // for simplicity, assume that nu is approximately constant
+        // and use value from first cell
+        nu_ = mu[0] / rho[0];
+    }
+    else
+    {
+        FatalErrorIn("actuatorLineElement::read()")
+                << "Could not find transportProperties,"
+                << " nor thermophysicalProperties in simulation"
+                << abort(FatalError);
+    }
 
     // Read writePerf switch
     dict_.lookup("writePerf") >> writePerf_;
@@ -438,6 +460,9 @@ void Foam::fv::actuatorLineElement::allocateInfluenceCells
 
     localRho_.setSize(count);
     localRho_ = localRho_[0];
+
+    localMu_.setSize(count);
+    localMu_ = localMu_[0];
 
     position_.setSize(count);
     position_ = position_[0];
@@ -836,6 +861,7 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     freeStreamVelocity_(vector::zero),
     forceVector_(1, vector::zero),
     localRho_(1, 1.0),
+    localMu_(1, -1.0),
     inflowVelocity_(1, vector::zero),
     epsilon_(1, 0.0),
     previousCenterCellI_(1, -1),
@@ -1042,6 +1068,12 @@ const Foam::scalar& Foam::fv::actuatorLineElement::rootDistance()
 void Foam::fv::actuatorLineElement::calculateForce()
 {
     scalar pi = Foam::constant::mathematical::pi;
+    
+    // compressible case, localMu is -1 for the incompressible case
+    if (localMu_[azimuthIndex_] > 0)
+    {
+        nu_ = localMu_[azimuthIndex_]/localRho_[azimuthIndex_];
+    }
 
     // Calculate vector normal to chord--span plane
     planformNormal_ =
@@ -1440,6 +1472,17 @@ void Foam::fv::actuatorLineElement::distributeRhoData
 {
     const label nCenter = localRho_.size();
     localRho_ = SubList<scalar>(globalRho, nCenter, index);
+    index += nCenter;
+}
+
+void Foam::fv::actuatorLineElement::distributeMuData
+(
+    List<scalar> &globalMu,
+    label &index
+)
+{
+    const label nCenter = localMu_.size();
+    localMu_ = SubList<scalar>(globalMu, nCenter, index);
     index += nCenter;
 }
 

@@ -120,6 +120,9 @@ protected:
         //- Density at element location for compressible case
         List<scalar> localRho_;
 
+        //- Density at element location for compressible case
+        List<scalar> localMu_;
+
         //- Inflow velocity
         List<vector> inflowVelocity_;
 
@@ -499,6 +502,13 @@ public:
             void distributeRhoData
             (
                 List<scalar>& globalRho,
+                label& index
+            );
+
+            //- distribute rho of the actuator line elements
+            void distributeMuData
+            (
+                List<scalar>& globalMu,
                 label& index
             );
         // Manipulation

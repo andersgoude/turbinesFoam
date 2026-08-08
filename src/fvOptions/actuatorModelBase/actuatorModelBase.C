@@ -61,6 +61,11 @@ void Foam::fv::actuatorModelBase::calculateALData
     if (rhoPtr_ == nullptr && mesh_.foundObject<volScalarField>("rho"))
     {
         rhoPtr_ = &mesh_.lookupObject<volScalarField>("rho");
+        // check if mu field exists -> compressible simulation
+        if (muPtr_ == nullptr && mesh_.foundObject<volScalarField>("thermo:mu"))
+        {
+            muPtr_ = &mesh_.lookupObject<volScalarField>("thermo:mu");
+        }
     }
 
     bool update = false;
@@ -94,6 +99,10 @@ void Foam::fv::actuatorModelBase::calculateALData
         if (rhoPtr_ != nullptr)
         {
             rho_.resize(nEpsilon);
+            if (muPtr_ != nullptr)
+            {
+                mu_.resize(nEpsilon);
+            }
         }
 
         // We need to do an initial sweep to find the center points first for
@@ -314,6 +323,38 @@ void Foam::fv::actuatorModelBase::calculateALData
                     );
                 }
             }
+
+            if (muPtr_ != nullptr)
+            {
+                index = 0;
+                forAll(cellI_, i)
+                {
+                    // Only check if owner, otherwise set to large value
+                    // so minOp will ignore it
+                    if (procI_[i] == myProcNo)
+                    {
+                        // only small variations in rho, pick local cell value
+                        mu_[i] = (*muPtr_)[cellI_[i]];
+                    }
+                    else
+                    {
+                        mu_[i] = VGREAT;
+                    }
+                }
+                reduce(mu_, minOp<List<scalar>>());
+                index = 0;
+                forAll(actuatorLines_, i)
+                {
+                    forAll(actuatorLines_[i]->elements(), j)
+                    {
+                        actuatorLines_[i]->elements()[j].distributeMuData
+                        (
+                            mu_,
+                            index
+                        );
+                    }
+                }
+            }
         }
     }
 }
@@ -440,8 +481,10 @@ Foam::fv::actuatorModelBase::actuatorModelBase(
       procI_(0),
       epsilon_(0),
       rho_(0),
+      mu_(0),
       actuatorLines_(0),
       rhoPtr_(nullptr),
+      muPtr_(nullptr),
       initialized_(false)
 {
     read(dict);
@@ -549,9 +592,9 @@ void Foam::fv::actuatorModelBase::addSup
     forceField.primitiveFieldRef() = vector::zero;
 
     // Should not be needed?
-    if (forceField.dimensions() != eqn.dimensions()/dimVolume)
+    if (forceField.dimensions() != eqn.dimensions()/dimVolume/dimDensity)
     {
-        forceField.dimensions().reset(eqn.dimensions()/dimVolume);
+        forceField.dimensions().reset(eqn.dimensions()/dimVolume/dimDensity);
     }
 
     calculateALData(fieldI);

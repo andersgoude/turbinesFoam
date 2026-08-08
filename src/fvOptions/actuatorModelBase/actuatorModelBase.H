@@ -97,12 +97,18 @@ protected:
 
         //- List of density values for each actuator line element
         List<scalar> rho_;
+
+        //- List of mu values for each actuator line element (compressible)
+        List<scalar> mu_;
         
         //- All actuator lines belonging to this object (for fast iterations)
         List<actuatorLineSource*> actuatorLines_;
 
         //- Pointer to the density field (for compressible flow)
         mutable const volScalarField* rhoPtr_;
+
+        //- Pointer to the dynamic viscocity field (for compressible flow)
+        mutable const volScalarField* muPtr_;
 
         //- Flag to indicate if the object has been initialized
         bool initialized_;
