@@ -383,7 +383,7 @@ bool Foam::fv::turbineALSource::read(const dictionary& dict)
         dynStallLoop_ = coeffs_.lookupOrDefault("dynStallLoop", 1);
         
         // Get blade multiplier
-        bladeMultiplier_ = coeffs_.lookupOrDefault("bladeMultiplier", 1.0);
+        bladeMultiplier_ = coeffs_.lookupOrDefault("bladeMultiplier", 1);
 
         // Get compact field
         compactField_ = coeffs_.lookupOrDefault("compactField", true);
@@ -397,6 +397,15 @@ bool Foam::fv::turbineALSource::read(const dictionary& dict)
         if (compactField_ == false)
         {
             cacheInteractions_ = false;
+        }
+
+        if (divisions_ % bladeMultiplier_ != 0 && nBlades_ == 1)
+        {
+            FatalErrorIn("void turbineALSource::read()")
+                    << "divisions must be a multiple of bladeMultiplier"
+                    << "current values are: divisions = " << divisions_
+                    << " bladeMultiplier = " << bladeMultiplier_
+                    << abort(FatalError);
         }
 
         // Get if we should apply relaxation to the force field
@@ -418,11 +427,13 @@ bool Foam::fv::turbineALSource::read(const dictionary& dict)
                  << " relaxMaxValue_ " << relaxMaxValue_
                  << endl;
         }
+        Info << "bladeMultiplier = " << bladeMultiplier_ << " divisions = " << divisions_ << endl;
 
         return true;
     }
     else
     {
+        Info << "turbineALSource.read() failed " << endl;
         return false;
     }
 }

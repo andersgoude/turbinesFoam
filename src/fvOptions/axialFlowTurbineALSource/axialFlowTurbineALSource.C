@@ -767,6 +767,23 @@ void Foam::fv::axialFlowTurbineALSource::allocateAL()
     {
         actuatorLines_[i]->allocateInfluenceCells(1, false);
     }
+
+    label nEpsilon = 0;
+    forAll(actuatorLines_, i)
+    {
+        forAll(actuatorLines_[i]->elements(), j)
+        {
+            nEpsilon += actuatorLines_[i]->elements()[j].epsilonCount();
+        }
+    }
+    // if-statement should not be necessary as this runs before
+    // actuatorModelBase changes its size for the farm case.
+    if (nEpsilon > epsilon_.size())
+    {
+        // When running turbineFarmSource, epsilon_ is not allocated
+        // in actuatorModelBase for this class
+        epsilon_.resize(nEpsilon);
+    }
 }
 
 void Foam::fv::axialFlowTurbineALSource::initializeAL()
@@ -970,7 +987,10 @@ void Foam::fv::axialFlowTurbineALSource::addForce
     meanDragCoefficient_ = dragCoefficient_;
     meanTorqueCoefficient_ = torqueCoefficient_;
     // Print performance to terminal
-    printPerf();
+    if (printPerf_)
+    {
+        printPerf();
+    }
 
     // Write performance data -- note this will write multiples if there are
     // multiple PIMPLE loops

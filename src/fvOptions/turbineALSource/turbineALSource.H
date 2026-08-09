@@ -216,7 +216,7 @@ protected:
         
         //- Multiply the force with this value (basically allows to set up
         // one bladed turbines that act like 3 bladed turbines)
-        scalar bladeMultiplier_;
+        label bladeMultiplier_;
 
         //- Compress the interaction field to improve memory acces
         bool compactField_;

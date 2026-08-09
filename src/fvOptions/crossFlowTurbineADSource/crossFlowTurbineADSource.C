@@ -144,7 +144,7 @@ void Foam::fv::crossFlowTurbineADSource::initializeAL()
         {
             forAll(actuatorLines_[i]->elements(), j)
             {
-                actuatorLines_[i]->setAzimuthIndex(azimuthIndex_);
+                actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, false);
                 actuatorLines_[i]->elements()[j].calcInfluenceEpsilon
                 (
                     maxDragCoefficient_
@@ -162,7 +162,7 @@ void Foam::fv::crossFlowTurbineADSource::initializeAL()
         // Add scalar source term from blades
         forAll(actuatorLines_, i)
         {
-            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_);
+            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, false);
             actuatorLines_[i]->constructInfluenceCellList
             (
                 azimuthIndex_,
@@ -221,7 +221,7 @@ void Foam::fv::crossFlowTurbineADSource::setupPositions(bool includeRing)
     {
         forAll(actuatorLines_, i)
         {
-            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_);
+            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, false);
             actuatorLines_[i]->findCells(includeRing);
         }
         rotateAD();
@@ -237,7 +237,7 @@ void Foam::fv::crossFlowTurbineADSource::calculateForces()
         {
             forAll(actuatorLines_, i)
             {
-                actuatorLines_[i]->setAzimuthIndex(azimuthIndex_);
+                actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, false);
                 actuatorLines_[i]->setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -279,7 +279,7 @@ void Foam::fv::crossFlowTurbineADSource::addForce
         // Add source for blade actuator lines
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].setAzimuthIndex(azimuthIndex_, true);
             blades_[i].setCustomTime // Not needed in current implementation
             (
                 customTime_[azimuthIndex_],
@@ -288,12 +288,32 @@ void Foam::fv::crossFlowTurbineADSource::addForce
             blades_[i].addForceFromChild
             (
                 forceField,
-                bladeMultiplier_/divisions_,
+                static_cast<scalar>(bladeMultiplier_)/divisions_,
                 compressible
             );
-            force_ += bladeMultiplier_*blades_[i].force();
+
             bladeMoments_[i] = blades_[i].moment(origin_);
-            moment += bladeMultiplier_*bladeMoments_[i];
+            
+            // when using nBlades == 1 with bladeMultiplier
+            // emulate 3 blades with even spacing
+            if (bladeMultiplier_ > 1 && nBlades_ == 1)
+            {
+                for (label k = 0; k < bladeMultiplier_; k++)
+                {
+                    label newazimuthIndex =
+                        (azimuthIndex_ + divisions_/bladeMultiplier_*k)
+                        % divisions_;
+                    blades_[i].setAzimuthIndex(newazimuthIndex, false);
+                    force_ += blades_[i].force();
+                    moment += blades_[i].moment(origin_);
+                }
+                blades_[i].setAzimuthIndex(azimuthIndex_, false);
+            }
+            else
+            {
+                force_ += bladeMultiplier_*blades_[i].force();
+                moment += bladeMultiplier_*bladeMoments_[i];
+            }
         }
 
         if (hasStruts_)
@@ -301,7 +321,7 @@ void Foam::fv::crossFlowTurbineADSource::addForce
             // Add source for strut actuator lines
             forAll(struts_, i)
             {
-                struts_[i].setAzimuthIndex(azimuthIndex_);
+                struts_[i].setAzimuthIndex(azimuthIndex_, true);
                 struts_[i].setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -310,18 +330,41 @@ void Foam::fv::crossFlowTurbineADSource::addForce
                 struts_[i].addForceFromChild
                 (
                     forceField,
-                    bladeMultiplier_/divisions_,
+                    static_cast<scalar>(bladeMultiplier_)/divisions_,
                     compressible
                 );
-                force_ += bladeMultiplier_*struts_[i].force();
-                moment += bladeMultiplier_*struts_[i].moment(origin_);
+
+                // when using nBlades == 1 with bladeMultiplier
+                // emulate 3 blades with even spacing
+                // Note: code will assume that if you only give one blade
+                // you also only gave the struts for one blade
+                // checking nStruts == 1 does not work as one blade can have
+                // multiple struts
+                if (bladeMultiplier_ > 1 && nBlades_ == 1)
+                {
+                    for (label k = 0; k < bladeMultiplier_; k++)
+                    {
+                        label newazimuthIndex =
+                            (azimuthIndex_ + divisions_/bladeMultiplier_*k)
+                            % divisions_;
+                        struts_[i].setAzimuthIndex(newazimuthIndex, false);
+                        force_ += struts_[i].force();
+                        moment += struts_[i].moment(origin_);
+                    }
+                    struts_[i].setAzimuthIndex(azimuthIndex_, false);
+                }
+                else
+                {
+                    force_ += bladeMultiplier_*struts_[i].force();
+                    moment += bladeMultiplier_*struts_[i].moment(origin_);
+                }
             }
         }
 
         if (hasShaft_)
         {
             // Add source for shaft actuator line
-            shaft_->setAzimuthIndex(azimuthIndex_);
+            shaft_->setAzimuthIndex(azimuthIndex_, true);
             shaft_->setCustomTime
             (
                 customTime_[azimuthIndex_],
@@ -354,7 +397,10 @@ void Foam::fv::crossFlowTurbineADSource::addForce
         meanDragCoefficient_ += dragCoefficient_;
         meanTorqueCoefficient_ += torqueCoefficient_;
         // Print performance to terminal
-        printPerf();
+        if (printPerf_)
+        {
+            printPerf();
+        }
 
         // Write performance data
         // Note this will write multiples if there are
@@ -389,7 +435,7 @@ void Foam::fv::crossFlowTurbineADSource::addTurbulence
         // Add scalar source term from blades
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].setAzimuthIndex(azimuthIndex_, false);
             blades_[i].setCustomTime // Not needed in current implementation
             (
                 customTime_[azimuthIndex_],
@@ -403,7 +449,7 @@ void Foam::fv::crossFlowTurbineADSource::addTurbulence
             // Add source for strut actuator lines
             forAll(struts_, i)
             {
-                struts_[i].setAzimuthIndex(azimuthIndex_);
+                struts_[i].setAzimuthIndex(azimuthIndex_, false);
                 struts_[i].setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -416,7 +462,7 @@ void Foam::fv::crossFlowTurbineADSource::addTurbulence
         if (hasShaft_)
         {
             // Add source for shaft actuator line
-            shaft_->setAzimuthIndex(azimuthIndex_);
+            shaft_->setAzimuthIndex(azimuthIndex_, false);
             shaft_->setCustomTime
             (
                 customTime_[azimuthIndex_],
@@ -425,7 +471,7 @@ void Foam::fv::crossFlowTurbineADSource::addTurbulence
             shaft_->addTurbulence(kFieldShaft, fieldName);
         }
     }
-    eqn += (bladeMultiplier_/divisions_)*kField
+    eqn += (static_cast<scalar>(bladeMultiplier_)/divisions_)*kField
             + (1.0/divisions_)*kFieldShaft;
 }
 

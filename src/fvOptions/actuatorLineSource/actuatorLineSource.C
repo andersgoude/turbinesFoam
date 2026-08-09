@@ -337,6 +337,18 @@ void Foam::fv::actuatorLineSource::createElements()
             coeffs_.lookup("meshFactor") >> meshFactor;
             dict.add("meshFactor", meshFactor);
         }
+        if (coeffs_.found("dragFactor"))
+        {
+            scalar dragFactor = 1.0;
+            coeffs_.lookup("dragFactor") >> dragFactor;
+            dict.add("dragFactor", dragFactor);
+        }
+        if (coeffs_.found("chordFactor_"))
+        {
+            scalar chordFactor_ = 0.25;
+            coeffs_.lookup("chordFactor_") >> chordFactor_;
+            dict.add("chordFactor_", chordFactor_);
+        }
         dictionary fcDict = coeffs_.subOrEmptyDict("flowCurvature");
         dict.add("flowCurvature", fcDict);
         bool writeElementPerf
@@ -760,14 +772,15 @@ void Foam::fv::actuatorLineSource::setCompactFields
 
 void Foam::fv::actuatorLineSource::setAzimuthIndex
 (
-    label azimuthIndex
+    label azimuthIndex,
+    bool clearBuffer
 )
 {
     forAll(elements_, i)
     {
-        elements_[i].setAzimuthIndex(azimuthIndex);
+        elements_[i].setAzimuthIndex(azimuthIndex, clearBuffer);
     }
-    if (azimuthIndex == 0)
+    if (clearBuffer &&  azimuthIndex == 0)
     {
         stringBuffer_.str("");
         stringBuffer_.clear();
@@ -790,9 +803,16 @@ void Foam::fv::actuatorLineSource::calculateElementForces()
     }
 }
 
-const Foam::vector& Foam::fv::actuatorLineSource::force()
+const Foam::vector Foam::fv::actuatorLineSource::force()
 {
-    return force_;
+    // recalculate instead of using force_ to get correct azimuthIndex
+    Foam::vector force = vector::zero;
+    
+    forAll(elements_, i)
+    {
+        force += elements_[i].force();
+    }
+    return force;
 }
 
 PtrList<Foam::fv::actuatorLineElement>& Foam::fv::actuatorLineSource::elements()
@@ -835,8 +855,11 @@ void Foam::fv::actuatorLineSource::addForce
         force_ += elements_[i].force();
     }
 
-    Info<< "Force (per unit density) on " << name_ << ": "
-        << endl << force_ << endl << endl;
+    if (printPerf_)
+    {
+        Info<< "Force (per unit density) on " << name_ << ": "
+            << endl << force_ << endl << endl;
+    }
 
     // Write performance to file
     if (Pstream::master() && (writePerf_ || writePerfEnd_))

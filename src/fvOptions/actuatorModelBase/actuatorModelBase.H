@@ -120,6 +120,9 @@ protected:
         // to avoid unnecessary calculations
         label firstField_;
 
+        //- Print status to terminal
+        bool printPerf_;
+
     // Protected Member Functions
 
         //- Gather data, calculate velocity and distribute

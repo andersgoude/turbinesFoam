@@ -583,7 +583,7 @@ public:
             );
 
             //- allocate the list of influence cells (for actuator disc)
-            void setAzimuthIndex(label azimuthIndex);
+            void setAzimuthIndex(label azimuthIndex, bool clearBuffer);
 
             //- Check if one can find the cell in
             // the nearby positions of the last cell

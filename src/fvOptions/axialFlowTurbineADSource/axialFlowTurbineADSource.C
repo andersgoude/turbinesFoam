@@ -179,26 +179,26 @@ void Foam::fv::axialFlowTurbineADSource::initializeAL()
 
     if (hasTower_)
     {
-        tower_->setAzimuthIndex(0); // not really needed, remove later
+        tower_->setAzimuthIndex(0, false); // not really needed, remove later
         tower_->calcInfluenceEpsilon(maxDragCoefficient_);
     }
 
     if (hasNacelle_)
     {
-        nacelle_->setAzimuthIndex(0); // not really needed, remove later
+        nacelle_->setAzimuthIndex(0, false); // not really needed, remove later
         nacelle_->calcInfluenceEpsilon(maxDragCoefficient_);
     }
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].setAzimuthIndex(azimuthIndex_, false);
             blades_[i].calcInfluenceEpsilon(maxDragCoefficient_);
         }
 
         if (hasHub_)
         {
-            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->setAzimuthIndex(azimuthIndex_, false);
             hub_->calcInfluenceEpsilon(maxDragCoefficient_);
         }
         rotateAD();
@@ -234,7 +234,7 @@ void Foam::fv::axialFlowTurbineADSource::initializeAL()
         // Add scalar source term from blades
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].setAzimuthIndex(azimuthIndex_, false);
             blades_[i].constructInfluenceCellList
             (
                 azimuthIndex_,
@@ -246,7 +246,7 @@ void Foam::fv::axialFlowTurbineADSource::initializeAL()
         if (hasHub_)
         {
             // Add source for hub actuator line
-            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->setAzimuthIndex(azimuthIndex_, false);
             hub_->constructInfluenceCellList
             (
                 azimuthIndex_,
@@ -305,26 +305,26 @@ void Foam::fv::axialFlowTurbineADSource::setupPositions(bool includeRing)
     // as tower and nacelle are not rotating
     if (hasTower_)
     {
-        tower_->setAzimuthIndex(0); // not really needed, remove later
+        tower_->setAzimuthIndex(0, false); // not really needed, remove later
         tower_->findCells(includeRing);
     }
 
     if (hasNacelle_)
     {
-        nacelle_->setAzimuthIndex(0); // not really needed, remove later
+        nacelle_->setAzimuthIndex(0, false); // not really needed, remove later
         nacelle_->findCells(includeRing);
     }
     for (azimuthIndex_ = 0; azimuthIndex_ < divisions_; azimuthIndex_++)
     {
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].setAzimuthIndex(azimuthIndex_, false);
             blades_[i].findCells(includeRing);
         }
 
         if (hasHub_)
         {
-            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->setAzimuthIndex(azimuthIndex_, false);
             hub_->findCells(includeRing);
         }
         rotateAD();
@@ -337,13 +337,13 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
     // as tower and nacelle are not rotating
     if (hasTower_)
     {
-        tower_->setAzimuthIndex(0); // not really needed, remove later
+        tower_->setAzimuthIndex(0, false); // not really needed, remove later
         tower_->calculateElementForces();
     }
 
     if (hasNacelle_)
     {
-        nacelle_->setAzimuthIndex(0); // not really needed, remove later
+        nacelle_->setAzimuthIndex(0, false); // not really needed, remove later
         nacelle_->calculateElementForces();
     }
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
@@ -352,7 +352,7 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
         {
             forAll(blades_, i)
             {
-                blades_[i].setAzimuthIndex(azimuthIndex_);
+                blades_[i].setAzimuthIndex(azimuthIndex_, false);
                 blades_[i].setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -362,7 +362,7 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
 
             if (hasHub_)
             {
-                hub_->setAzimuthIndex(azimuthIndex_);
+                hub_->setAzimuthIndex(azimuthIndex_, false);
                 hub_->setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -410,14 +410,14 @@ void Foam::fv::axialFlowTurbineADSource::addForce
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->setAzimuthIndex(0);
+        tower_->setAzimuthIndex(0, true);
         tower_->addForceFromChild(forceField, 1.0, compressible);
     }
 
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->setAzimuthIndex(0);
+        nacelle_->setAzimuthIndex(0, true);
         nacelle_->addForceFromChild(forceField, 1.0, compressible);
     }
     
@@ -445,24 +445,42 @@ void Foam::fv::axialFlowTurbineADSource::addForce
         // Add source for blade actuator lines
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_);
+            blades_[i].setAzimuthIndex(azimuthIndex_, true);
             blades_[i].addForceFromChild
             (
                 forceField,
-                bladeMultiplier_/divisions_,
+                static_cast<scalar>(bladeMultiplier_)/divisions_,
                 compressible
             );
 
-            //Info<< "Added blade" << endl;
-            force_ += bladeMultiplier_*blades_[i].force();
             bladeMoments_[i] = blades_[i].moment(origin_);
-            moment += bladeMultiplier_*bladeMoments_[i];
+
+            // when using nBlades == 1 with bladeMultiplier
+            // emulate 3 blades with even spacing
+            if (bladeMultiplier_ > 1 && nBlades_ == 1)
+            {
+                for (label k = 0; k < bladeMultiplier_; k++)
+                {
+                    label newazimuthIndex =
+                        (azimuthIndex_ + divisions_/bladeMultiplier_*k)
+                        % divisions_;
+                    blades_[i].setAzimuthIndex(newazimuthIndex, false);
+                    force_ += blades_[i].force();
+                    moment += blades_[i].moment(origin_);
+                }
+                blades_[i].setAzimuthIndex(azimuthIndex_, false);
+            }
+            else
+            {
+                force_ += bladeMultiplier_*blades_[i].force();
+                moment += bladeMultiplier_*bladeMoments_[i];
+            }
         }
 
         if (hasHub_)
         {
             // Add source for hub actuator line
-            hub_->setAzimuthIndex(azimuthIndex_);
+            hub_->setAzimuthIndex(azimuthIndex_, true);
             hub_->addForceFromChild
             (
                 forceField,
@@ -508,7 +526,10 @@ void Foam::fv::axialFlowTurbineADSource::addForce
         meanDragCoefficient_ += dragCoefficient_;
         meanTorqueCoefficient_ += torqueCoefficient_;
         // Print performance to terminal
-        printPerf();
+        if (printPerf_)
+        {
+            printPerf();
+        }
 
         // Write performance data
         // Note this will write multiples if there are
@@ -540,7 +561,7 @@ void Foam::fv::axialFlowTurbineADSource::addTurbulence
         // Add scalar source term from blades
         forAll(actuatorLines_, i)
         {
-            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_);
+            actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, false);
             actuatorLines_[i]->setCustomTime
             (
                 customTime_[azimuthIndex_],
@@ -549,7 +570,7 @@ void Foam::fv::axialFlowTurbineADSource::addTurbulence
             actuatorLines_[i]->addTurbulence(kField, fieldName);
         }
     }
-    eqn += (bladeMultiplier_/divisions_)*kField;
+    eqn += (static_cast<scalar>(bladeMultiplier_)/divisions_)*kField;
 }
 
 // ************************************************************************* //

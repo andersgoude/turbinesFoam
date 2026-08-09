@@ -487,6 +487,7 @@ Foam::fv::actuatorModelBase::actuatorModelBase(
       muPtr_(nullptr),
       initialized_(false)
 {
+    meshBoundBox_.inflate(1e-6);
     read(dict);
 }
 
@@ -630,6 +631,11 @@ bool Foam::fv::actuatorModelBase::read(const dictionary& dict)
         writeForceField_ = coeffs_.lookupOrDefault
         (
             "writeForceField",
+            true
+        );
+        printPerf_ = coeffs_.lookupOrDefault
+        (
+            "printPerf",
             true
         );
         return true;

@@ -148,6 +148,20 @@ void Foam::fv::actuatorLineElement::read()
     chordFactor_ = GaussianCoeffs.lookupOrDefault("chordFactor", 0.25);
     dragFactor_ = GaussianCoeffs.lookupOrDefault("dragFactor", 1.0);
     meshFactor_ = GaussianCoeffs.lookupOrDefault("meshFactor", 2.0);
+
+    // Make it pssible to override these factors for an individual line
+    if (dict_.found("chordFactor"))
+    {
+        dict_.lookup("chordFactor") >> chordFactor_;
+    }
+    if (dict_.found("dragFactor"))
+    {
+        dict_.lookup("dragFactor") >> dragFactor_;
+    }
+    if (dict_.found("meshFactor"))
+    {
+        dict_.lookup("meshFactor") >> meshFactor_;
+    }
 }
 
 
@@ -592,11 +606,12 @@ void Foam::fv::actuatorLineElement::constructInfluenceCellList
 
 void Foam::fv::actuatorLineElement::setAzimuthIndex
 (
-    label azimuthIndex
+    label azimuthIndex,
+    bool clearBuffer
 )
 {
     azimuthIndex_ = azimuthIndex;
-    if (azimuthIndex == 0)
+    if (clearBuffer && azimuthIndex == 0)
     {
         stringBuffer_.str("");
         stringBuffer_.clear();
@@ -1154,6 +1169,11 @@ void Foam::fv::actuatorLineElement::calculateForce()
     // Correct coefficients with dynamic stall model
     if (dynamicStallActive_)
     {
+        Info << "calling dynamic stall for index " << azimuthIndex_
+            << " relvel = " << mag(relativeVelocity_[azimuthIndex_])
+            << " CL = " << liftCoefficient_[azimuthIndex_]
+            << " CD = " << dragCoefficient_[azimuthIndex_]
+            << " CM = " << momentCoefficient_[azimuthIndex_] << endl;
         dynamicStall_->correct
         (
             mag(relativeVelocity_[azimuthIndex_]),

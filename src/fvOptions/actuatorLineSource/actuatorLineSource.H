@@ -190,8 +190,8 @@ public:
 
         // Access
 
-            //- Return const reference to the total force vector
-            const vector& force();
+            //- Return the total force vector
+            const vector force();
 
             //- Return reference to element pointer list
             PtrList<actuatorLineElement>& elements();
@@ -256,7 +256,7 @@ public:
             );
 
             //- Setup code for actuatorDisc to speed up calculations
-            void setAzimuthIndex(label azimuthIndex);
+            void setAzimuthIndex(label azimuthIndex, bool clearBuffer);
 
             //- Find cells that can be determined without parallel interaction
             virtual void findCells(bool includeRing = true);
