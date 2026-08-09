@@ -1169,11 +1169,6 @@ void Foam::fv::actuatorLineElement::calculateForce()
     // Correct coefficients with dynamic stall model
     if (dynamicStallActive_)
     {
-        Info << "calling dynamic stall for index " << azimuthIndex_
-            << " relvel = " << mag(relativeVelocity_[azimuthIndex_])
-            << " CL = " << liftCoefficient_[azimuthIndex_]
-            << " CD = " << dragCoefficient_[azimuthIndex_]
-            << " CM = " << momentCoefficient_[azimuthIndex_] << endl;
         dynamicStall_->correct
         (
             mag(relativeVelocity_[azimuthIndex_]),

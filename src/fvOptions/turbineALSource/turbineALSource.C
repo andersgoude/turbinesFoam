@@ -427,7 +427,6 @@ bool Foam::fv::turbineALSource::read(const dictionary& dict)
                  << " relaxMaxValue_ " << relaxMaxValue_
                  << endl;
         }
-        Info << "bladeMultiplier = " << bladeMultiplier_ << " divisions = " << divisions_ << endl;
 
         return true;
     }
