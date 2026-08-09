@@ -256,6 +256,9 @@ protected:
         //- Reynolds number
         scalar Re_;
 
+        //- Always recalculate static data
+        bool recalculateStatic_;
+
 
     // Protected member functions
 

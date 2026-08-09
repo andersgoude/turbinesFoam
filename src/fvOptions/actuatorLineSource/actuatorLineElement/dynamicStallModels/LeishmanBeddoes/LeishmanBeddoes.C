@@ -524,13 +524,15 @@ Foam::fv::LeishmanBeddoes::LeishmanBeddoes
     tau_(0.0),
     tauPrev_(0.0),
     nNewTimes_(0),
+    alphaSS_(0.0),
     fCrit_(0.7),
     K0_(1e-6),
     K1_(0.0),
     K2_(0.0),
     cmFitExponent_(coeffs_.lookupOrDefault("cmFitExponent", 2)),
     CM_(0.0),
-    Re_(0.0)
+    Re_(0.0),
+    recalculateStatic_(coeffs_.lookupOrDefault("recalculateStatic", true))
 {
     dict_.lookup("chordLength") >> c_;
 
@@ -623,7 +625,7 @@ void Foam::fv::LeishmanBeddoes::correct
     }
     // Evaluate static coefficient data if it has changed, e.g., from a
     // Reynolds number correction
-    if (profileData_.staticStallAngleRad() != alphaSS_)
+    if (profileData_.staticStallAngleRad() != alphaSS_ || recalculateStatic_)
     {
         evalStaticData();
     }
