@@ -841,8 +841,9 @@ void Foam::fv::actuatorLineElement::writePerf()
             << forceVector_[azimuthIndex_].y()*localRho_[azimuthIndex_] << ","
             << forceVector_[azimuthIndex_].z()*localRho_[azimuthIndex_] << ","
             << endEffectFactor_ << "," << tangentialRefCoefficient() << ","
-            << normalRefCoefficient() << "," << tangentialRefForce() << ","
-            << normalRefForce() << std::endl;
+            << normalRefCoefficient() << ","
+            << tangentialRefForce()*localRho_[azimuthIndex_] << ","
+            << normalRefForce()*localRho_[azimuthIndex_] << std::endl;
 
     // only write to file with writePerf_, writePerfEnd_ writes in destructor
     if (writePerf_ && outputFile_.is_open())
