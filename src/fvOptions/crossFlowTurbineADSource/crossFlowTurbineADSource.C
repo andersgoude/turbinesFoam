@@ -183,7 +183,8 @@ void Foam::fv::crossFlowTurbineADSource::initializeAL()
     if (Pstream::master())
     {
         Info<< "Active cells participating in the force field: "
-            << nActiveGlobal << " of " << nCellsGlobal << endl;
+            << nActiveGlobal << " of " << nCellsGlobal << " for "
+            << name_ << endl;
     }
 
     activePositions_.setSize(nActive);

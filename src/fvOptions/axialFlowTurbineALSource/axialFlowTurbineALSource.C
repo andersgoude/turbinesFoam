@@ -262,8 +262,12 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             "nVelocitySamples",
             coeffs_.lookupOrDefault("nVelocitySamples", 20)
         );
-        bladeSubDict.add("selectionMode", coeffs_.lookup("selectionMode"));
-        bladeSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+        word selectionMode(coeffs_.lookup("selectionMode"));
+        bladeSubDict.add("selectionMode", selectionMode);
+        if (selectionMode != "all")
+        {
+            bladeSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+        }
 
         // Do not write force from individual actuator line unless specified
         bladeSubDict.lookupOrAddDefault("writeForceField", false);
@@ -357,8 +361,12 @@ void Foam::fv::axialFlowTurbineALSource::createHub()
     hubSubDict.add("fieldNames", coeffs_.lookup("fieldNames"));
     hubSubDict.add("profileData", profileData_);
     hubSubDict.add("freeStreamVelocity", freeStreamVelocity_);
-    hubSubDict.add("selectionMode", coeffs_.lookup("selectionMode"));
-    hubSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+    word selectionMode(coeffs_.lookup("selectionMode"));
+    hubSubDict.add("selectionMode", selectionMode);
+    if (selectionMode != "all")
+    {
+        hubSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+    }
 
     // Do not write force from individual actuator line unless specified
     hubSubDict.lookupOrAddDefault("writeForceField", false);
@@ -445,8 +453,12 @@ void Foam::fv::axialFlowTurbineALSource::createTower()
     towerSubDict.add("fieldNames", coeffs_.lookup("fieldNames"));
     towerSubDict.add("profileData", profileData_);
     towerSubDict.add("freeStreamVelocity", freeStreamVelocity_);
-    towerSubDict.add("selectionMode", coeffs_.lookup("selectionMode"));
-    towerSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+    word selectionMode(coeffs_.lookup("selectionMode"));
+    towerSubDict.add("selectionMode", selectionMode);
+    if (selectionMode != "all")
+    {
+        towerSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+    }
 
     // Do not write force from individual actuator line unless specified
     towerSubDict.lookupOrAddDefault("writeForceField", false);

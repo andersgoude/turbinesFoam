@@ -71,16 +71,20 @@ void Foam::fv::turbineFarmSource::createAxialFlowTurbines()
         turbineSubDict.add("fieldNames", coeffs_.lookup("fieldNames"));
 
         // copy farm data if not specified
-        turbineSubDict.lookupOrAddDefault
+        word selectionMode = turbineSubDict.lookupOrAddDefault
         (
             "selectionMode",
-            coeffs_.lookup("selectionMode")
+            coeffs_.getOrDefault<word>("selectionMode", "all")
         );
-        turbineSubDict.lookupOrAddDefault
-        (
-            "cellSet",
-            coeffs_.lookup("cellSet")
-        );
+
+        if (selectionMode != "all")
+        {
+            turbineSubDict.lookupOrAddDefault
+            (
+                "cellSet",
+                coeffs_.lookup("cellSet")
+            );
+        }
 
         // Do not write force from individual turbines unless specified
         turbineSubDict.lookupOrAddDefault("writeForceField", false);
@@ -150,16 +154,20 @@ void Foam::fv::turbineFarmSource::createCrossFlowTurbines()
         turbineSubDict.add("fieldNames", coeffs_.lookup("fieldNames"));
 
         // copy farm data if not specified
-        turbineSubDict.lookupOrAddDefault
+        word selectionMode = turbineSubDict.lookupOrAddDefault
         (
             "selectionMode",
-            coeffs_.lookup("selectionMode")
+            coeffs_.getOrDefault<word>("selectionMode", "all")
         );
-        turbineSubDict.lookupOrAddDefault
-        (
-            "cellSet",
-            coeffs_.lookup("cellSet")
-        );
+
+        if (selectionMode != "all")
+        {
+            turbineSubDict.lookupOrAddDefault
+            (
+                "cellSet",
+                coeffs_.lookup("cellSet")
+            );
+        }
 
         // Do not write force from individual turbines unless specified
         turbineSubDict.lookupOrAddDefault("writeForceField", false);

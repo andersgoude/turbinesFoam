@@ -254,8 +254,12 @@ void Foam::fv::crossFlowTurbineALSource::createBlades()
             "nVelocitySamples",
             coeffs_.lookupOrDefault("nVelocitySamples", 20)
         );
-        bladeSubDict.add("selectionMode", coeffs_.lookup("selectionMode"));
-        bladeSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+        word selectionMode(coeffs_.lookup("selectionMode"));
+        bladeSubDict.add("selectionMode", selectionMode);
+        if (selectionMode != "all")
+        {
+            bladeSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+        }
 
         // Lookup or create flowCurvature subDict
         dictionary fcDict = coeffs_.subOrEmptyDict("flowCurvature");
@@ -428,8 +432,12 @@ void Foam::fv::crossFlowTurbineALSource::createStruts()
 
         strutSubDict.add("elementGeometry", elementGeometry);
         strutSubDict.add("initialVelocities", initialVelocities);
-        strutSubDict.add("selectionMode", coeffs_.lookup("selectionMode"));
-        strutSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+        word selectionMode(coeffs_.lookup("selectionMode"));
+        strutSubDict.add("selectionMode", selectionMode);
+        if (selectionMode != "all")
+        {
+            strutSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+        }
 
         // Do not write force from individual actuator line unless specified
         strutSubDict.lookupOrAddDefault("writeForceField", false);
@@ -513,8 +521,12 @@ void Foam::fv::crossFlowTurbineALSource::createShaft()
     shaftSubDict.add("fieldNames", coeffs_.lookup("fieldNames"));
     shaftSubDict.add("profileData", profileData_);
     shaftSubDict.add("freeStreamVelocity", freeStreamVelocity_);
-    shaftSubDict.add("selectionMode", coeffs_.lookup("selectionMode"));
-    shaftSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+    word selectionMode(coeffs_.lookup("selectionMode"));
+    shaftSubDict.add("selectionMode", selectionMode);
+    if (selectionMode != "all")
+    {
+        shaftSubDict.add("cellSet", coeffs_.lookup("cellSet"));
+    }
 
     // Do not write force from individual actuator line unless specified
     shaftSubDict.lookupOrAddDefault("writeForceField", false);
