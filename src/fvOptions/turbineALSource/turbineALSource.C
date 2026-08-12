@@ -281,19 +281,6 @@ Foam::fv::turbineALSource::~turbineALSource()
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-void Foam::fv::turbineALSource::createForceFieldForChildren
-(
-    const bool compressible
-)
-{
-    // Create for myself (only if writeForceField_ is true)
-    createForceField(false, compressible);
-    forAll(actuatorLines_, i)
-    {
-        actuatorLines_[i]->createForceFieldForChildren(compressible);
-    }
-}
-
 void Foam::fv::turbineALSource::printCoeffs() const
 {
     Info<< "Number of blades: " << nBlades_ << endl;

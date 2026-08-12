@@ -289,24 +289,6 @@ void Foam::fv::turbineFarmSource::calculateForces()
     }
 }
 
-void Foam::fv::turbineFarmSource::createForceFieldForChildren
-(
-    const bool compressible
-)
-{
-    // Create for myself (only if writeForceField_ is true)
-    createForceField(false, compressible);
-
-    forAll(axialFlowTurbines_, i)
-    {
-        axialFlowTurbines_[i].createForceFieldForChildren(compressible);
-    }
-    forAll(crossFlowTurbines_, i)
-    {
-        crossFlowTurbines_[i].createForceFieldForChildren(compressible);
-    }
-}
-
 void Foam::fv::turbineFarmSource::addForce
 (
     volVectorField &forceField,

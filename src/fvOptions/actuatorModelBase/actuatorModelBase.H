@@ -132,9 +132,7 @@ protected:
         void distributeEpsilon();
 
         //- Create local force field if needed
-        //  createAlways = true, for main class, always create the force field
-        //  createAlways = false, only create if writeForceField_ == true
-        void createForceField(const bool createAlways, const bool compressible);
+        void createForceField();
 
 public:
 
@@ -174,9 +172,6 @@ public:
         //- Calculate the force once velocity is sampled
         virtual void calculateForces();
 
-        //- Virtual function that each class implements to create
-        //  the field for itself + all child objects
-        virtual void createForceFieldForChildren(const bool compressible);
 
         // Access
 

@@ -336,12 +336,6 @@ public:
 
     // Member Functions
 
-        // Routines for actuatorModelBase for parallel efficiency
-
-            //- Virtual function that each class implements to create
-            //  the field for itself + all child objects
-            virtual void createForceFieldForChildren(const bool compressible);
-
         // Access
 
             //- Return const access to runTime

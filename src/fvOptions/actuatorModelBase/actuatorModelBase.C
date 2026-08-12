@@ -389,31 +389,13 @@ void Foam::fv::actuatorModelBase::distributeEpsilon()
     }
 }
 
-void Foam::fv::actuatorModelBase::createForceField
-(
-    const bool createAlways,
-    const bool compressible
-)
+void Foam::fv::actuatorModelBase::createForceField()
 {
-    // Create only if:
-    //  - creation is forced (top-level class), OR
-    //  - the user requested to store the field
-    if (createAlways == false && writeForceField_ == false)
-    {
-        return;
-    }
-
     // Already created, do nothing
     if (forceFieldPtr_.valid())
     {
         return;
     }
-
-
-    // Set force feed dimensions depending on if simulation is compressible
-     const dimensionSet dims = compressible
-         ? dimForce/dimVolume
-         : dimForce/dimVolume/dimDensity;
 
     forceFieldPtr_.reset
     (
@@ -428,7 +410,7 @@ void Foam::fv::actuatorModelBase::createForceField
                 writeForceField_ ? IOobject::AUTO_WRITE : IOobject::NO_WRITE
             ),
             mesh_,
-            dimensionedVector("force", dims, Zero)
+            dimensionedVector("Force", dimForce/dimVolume, Zero)
         )
     );
     //forceFieldPtr_().write();
@@ -449,15 +431,6 @@ void Foam::fv::actuatorModelBase::setupPositions(bool includeRing)
 
 void Foam::fv::actuatorModelBase::calculateForces()
 {
-}
-
-void Foam::fv::actuatorModelBase::createForceFieldForChildren
-(
-    const bool compressible
-)
-{
-    // Create for myself (only if writeForceField_ is true)
-    createForceField(false, compressible);
 }
 
 const List<Foam::fv::actuatorLineSource*>&
@@ -489,6 +462,25 @@ Foam::fv::actuatorModelBase::actuatorModelBase(
 {
     meshBoundBox_.inflate(1e-6);
     read(dict);
+    if (writeForceField_)
+    {
+        forceFieldPtr_.reset
+        (
+            new volVectorField
+            (
+                IOobject
+                (
+                    name + ":force",
+                    mesh_.time().timeName(),
+                    mesh_,
+                    IOobject::NO_READ,
+                    IOobject::AUTO_WRITE
+                ),
+                mesh_,
+                dimensionedVector("Force", dimForce/dimVolume, Zero)
+            )
+        );
+    }
 }
 
 
@@ -557,7 +549,7 @@ void Foam::fv::actuatorModelBase::addSup
 {
     if (initialized_ == false)
     {
-        createForceField(true, false);
+        createForceField();
     }
     volVectorField& forceField = forceFieldPtr_();
     forceField.primitiveFieldRef() = vector::zero;
@@ -587,12 +579,11 @@ void Foam::fv::actuatorModelBase::addSup
 {
     if (initialized_ == false)
     {
-        createForceField(true, true);
+        createForceField();
     }
     volVectorField& forceField = forceFieldPtr_();
     forceField.primitiveFieldRef() = vector::zero;
 
-    // Should not be needed?
     if (forceField.dimensions() != eqn.dimensions()/dimVolume/dimDensity)
     {
         forceField.dimensions().reset(eqn.dimensions()/dimVolume/dimDensity);
