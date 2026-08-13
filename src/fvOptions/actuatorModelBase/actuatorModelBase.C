@@ -403,7 +403,7 @@ void Foam::fv::actuatorModelBase::createForceField()
         (
             IOobject
             (
-                name() + ":force",
+                name() + forceFieldName_,
                 mesh_.time().timeName(),
                 mesh_,
                 IOobject::NO_READ,
@@ -470,7 +470,7 @@ Foam::fv::actuatorModelBase::actuatorModelBase(
             (
                 IOobject
                 (
-                    name + ":force",
+                    name + forceFieldName_,
                     mesh_.time().timeName(),
                     mesh_,
                     IOobject::NO_READ,
@@ -628,6 +628,12 @@ bool Foam::fv::actuatorModelBase::read(const dictionary& dict)
         (
             "printPerf",
             true
+        );
+
+        forceFieldName_ = coeffs_.lookupOrDefault<word>
+        (
+            "forceFieldName",
+            ":force"
         );
         return true;
     }

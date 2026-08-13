@@ -123,6 +123,9 @@ protected:
         //- Print status to terminal
         bool printPerf_;
 
+        //- name for force field
+        word forceFieldName_;
+
     // Protected Member Functions
 
         //- Gather data, calculate velocity and distribute
