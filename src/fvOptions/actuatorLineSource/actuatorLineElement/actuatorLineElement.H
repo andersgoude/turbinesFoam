@@ -130,22 +130,10 @@ protected:
         List<scalar> epsilon_;
 
         //- Previously found cell, to prevent unnecessary lookups
-        List<label> previousCenterCellI_;
-
-        //- Previously found cell, to prevent unnecessary lookups
-        List<label> previousCenterProcI_;
-
-        //- Previously found cell, to prevent unnecessary lookups
         List<point> previousLocation_;
 
         //- Previously found ring cell (actuator disc only)
         List<List<point>> previousRingLocation_;
-
-        //- Previously found cell, to prevent unnecessary lookups
-        List<bool> previousLocationValid_;
-
-        //- Previously found ring location (actuator disc only)
-        List<List<bool>> previousRingLocationValid_;
 
         //- for acutatorDisc, have previous positions stored for fast lookup
         List<label> centerCellI_;

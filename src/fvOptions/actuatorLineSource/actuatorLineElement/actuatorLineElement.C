@@ -234,7 +234,8 @@ void Foam::fv::actuatorLineElement::calcProjectionEpsilon()
     scalar epsilonMesh = VGREAT;
     const scalarField& V = mesh_.V();
 
-    if (centerCellI_[azimuthIndex_] >= 0)
+    if (centerProcI_[azimuthIndex_] == Pstream::myProcNo()
+            && centerCellI_[azimuthIndex_] >= 0)
     {
         // Projection width based on local cell size (from Troldborg (2008))
         epsilonMesh = 2.0*Foam::cbrt(V[centerCellI_[azimuthIndex_]]);
@@ -514,38 +515,31 @@ void Foam::fv::actuatorLineElement::allocateInfluenceCells
         ringProcI_.setSize(count);
         velocitiesRing_.setSize(count);
         previousRingLocation_.setSize(count);
-        previousRingLocationValid_.setSize(count);
         forAll(ringCellI_, azimuthI)
         {
             ringCellI_[azimuthI].setSize
             (
-                nVelocitySamples_,
-                -1
+                nVelocitySamples_
             );
+            ringCellI_[azimuthI] = -1;
 
             ringProcI_[azimuthI].setSize
             (
-                nVelocitySamples_,
-                -1
+                nVelocitySamples_
             );
+            ringProcI_[azimuthI] = -1;
 
             velocitiesRing_[azimuthI].setSize
             (
-                nVelocitySamples_,
-                vector::zero
+                nVelocitySamples_
             );
+            velocitiesRing_[azimuthI] = vector::zero;
 
             previousRingLocation_[azimuthI].setSize
             (
-                nVelocitySamples_,
-                vector::zero
+                nVelocitySamples_
             );
-
-            previousRingLocationValid_[azimuthI].setSize
-            (
-                nVelocitySamples_,
-                false
-            );
+            previousRingLocation_[azimuthI] = vector::zero;
         }
     }
 }
@@ -626,38 +620,30 @@ label Foam::fv::actuatorLineElement::findNearbyCell
 {
     label localCell = -1;
 
-    if
-    (
-        previousCenterProcI_[azimuthIndex_] == Pstream::myProcNo()
-            && previousCenterCellI_[azimuthIndex_] >= 0
-            && previousCenterCellI_[azimuthIndex_] < mesh_.nCells()
-    )
+    // Check if previousCell still is valid
+    if (mesh_.pointInCell(location, previousCell))
     {
-        // Check cached cell
-        if (mesh_.pointInCell(location, previousCenterProcI_[azimuthIndex_]))
-        {
-            localCell = previousCenterProcI_[azimuthIndex_];
-        }
-        else
-        {
-            // If not previous cell, check neighboring cells
-            const labelList& nbrs =
-                mesh_.cellCells()[previousCenterProcI_[azimuthIndex_]];
+        localCell = previousCell;
+    }
+    else
+    {
+        // If not previous cell, check neighboring cells
+        const labelList& nbrs =
+            mesh_.cellCells()[previousCell];
 
-            forAll(nbrs, nbrI)
-            {
-                label testCell = nbrs[nbrI];
+        forAll(nbrs, nbrI)
+        {
+            label testCell = nbrs[nbrI];
 
-                if
-                (
-                    testCell >= 0
+            if
+            (
+                testCell >= 0
                     && testCell < mesh_.nCells()
                     && mesh_.pointInCell(location, testCell)
-                )
-                {
-                    localCell = testCell;
-                    break;
-                }
+            )
+            {
+                localCell = testCell;
+                break;
             }
         }
     }
@@ -880,11 +866,8 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     localMu_(1, -1.0),
     inflowVelocity_(1, vector::zero),
     epsilon_(1, 0.0),
-    previousCenterCellI_(1, -1),
-    previousCenterProcI_(1, -1),
     previousLocation_(1, point::zero),
     previousRingLocation_(0),
-    previousLocationValid_(1, false),
     centerCellI_(1, -1),
     centerProcI_(1, -1),
     ringCellI_(0),
