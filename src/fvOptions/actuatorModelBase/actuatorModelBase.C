@@ -524,6 +524,10 @@ void Foam::fv::actuatorModelBase::addForceFromChild
     if (useLocal)
     {
         target.primitiveFieldRef() = vector::zero;
+        if (target.dimensions() != forceField.dimensions()/dimVolume)
+        {
+            target.dimensions().reset(forceField.dimensions());
+        }
     }
 
     addForce(target, scale, compressible);
@@ -536,7 +540,16 @@ void Foam::fv::actuatorModelBase::addForceFromChild
         // for the main field
         if (compressible)
         {
-            target *= *rhoPtr_;
+            // First time, we need to save rho
+            if (rhoPtr_ == nullptr && mesh_.foundObject<volScalarField>("rho"))
+            {
+                rhoPtr_ = &mesh_.lookupObject<volScalarField>("rho");
+            }
+            // rho should exist for compressible simulations, but check anyway
+            if (rhoPtr_ != nullptr)
+            {
+                target *= *rhoPtr_;
+            }
         }
     }
 }
