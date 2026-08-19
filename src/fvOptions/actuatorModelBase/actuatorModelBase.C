@@ -139,12 +139,12 @@ void Foam::fv::actuatorModelBase::calculateALData
 
         // We actually only need to collect data on the cell index to see
         // failed cells, processes only need to know if they own it or not
-        reduce(centerCellI, maxOp<List<label>>());
+        reduce(centerProcI, maxOp<List<label>>());
 
         // check the cells we couldn't find in first sweep
-        forAll(centerCellI, i)
+        forAll(centerProcI, i)
         {
-            if (centerCellI[i] < 0)
+            if (centerProcI[i] < 0)
             {
                 if (meshBoundBox_.containsInside(centerLocations[i]))
                 {
@@ -217,14 +217,14 @@ void Foam::fv::actuatorModelBase::calculateALData
                 );
             }
         }
-        // We actually only need to collect data on the cell index to see
-        // failed cells, processes only need to know if they own it or not
-        reduce(cellI_, maxOp<List<label>>());
+        // We need to ensure that only one processor own one cell
+        // (multiple processes can find the same cell)
+        reduce(procI_, maxOp<List<label>>());
 
         // check the cells we couldn't find in first sweep
-        forAll(cellI_, i)
+        forAll(procI_, i)
         {
-            if (cellI_[i] < 0)
+            if (procI_[i] < 0)
             {
                 if (meshBoundBox_.containsInside(locations_[i]))
                 {
@@ -239,10 +239,10 @@ void Foam::fv::actuatorModelBase::calculateALData
 
         // This part is only a safety check to ensure that the point is in mesh
         // can be removed if this is not needed
-        reduce(cellI_, maxOp<List<label>>());
-        forAll(cellI_, i)
+        reduce(procI_, maxOp<List<label>>());
+        forAll(procI_, i)
         {
-            if (cellI_[i] < 0)
+            if (procI_[i] < 0)
             {
                 // Raise fatal error since inflow velocity cannot be detected
                 FatalErrorIn("void actuatorModelBase::calculateALData()")
