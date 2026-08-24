@@ -338,13 +338,13 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
     // as tower and nacelle are not rotating
     if (hasTower_)
     {
-        tower_->setAzimuthIndex(0, false); // not really needed, remove later
+        tower_->setAzimuthIndex(0, true); // not really needed, remove later
         tower_->calculateElementForces();
     }
 
     if (hasNacelle_)
     {
-        nacelle_->setAzimuthIndex(0, false); // not really needed, remove later
+        nacelle_->setAzimuthIndex(0, true); // not really needed, remove later
         nacelle_->calculateElementForces();
     }
     for (int currentLoop = 0; currentLoop < dynStallLoop_; currentLoop++)
@@ -353,7 +353,7 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
         {
             forAll(blades_, i)
             {
-                blades_[i].setAzimuthIndex(azimuthIndex_, false);
+                blades_[i].setAzimuthIndex(azimuthIndex_, true);
                 blades_[i].setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -363,7 +363,7 @@ void Foam::fv::axialFlowTurbineADSource::calculateForces()
 
             if (hasHub_)
             {
-                hub_->setAzimuthIndex(azimuthIndex_, false);
+                hub_->setAzimuthIndex(azimuthIndex_, true);
                 hub_->setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -411,14 +411,14 @@ void Foam::fv::axialFlowTurbineADSource::addForce
     if (hasTower_)
     {
         // Add source for tower actuator line
-        tower_->setAzimuthIndex(0, true);
+        tower_->setAzimuthIndex(0, false);
         tower_->addForceFromChild(forceField, 1.0, compressible);
     }
 
     if (hasNacelle_)
     {
         // Add source for tower actuator line
-        nacelle_->setAzimuthIndex(0, true);
+        nacelle_->setAzimuthIndex(0, false);
         nacelle_->addForceFromChild(forceField, 1.0, compressible);
     }
     
@@ -446,7 +446,7 @@ void Foam::fv::axialFlowTurbineADSource::addForce
         // Add source for blade actuator lines
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_, true);
+            blades_[i].setAzimuthIndex(azimuthIndex_, false);
             blades_[i].addForceFromChild
             (
                 forceField,
@@ -481,7 +481,7 @@ void Foam::fv::axialFlowTurbineADSource::addForce
         if (hasHub_)
         {
             // Add source for hub actuator line
-            hub_->setAzimuthIndex(azimuthIndex_, true);
+            hub_->setAzimuthIndex(azimuthIndex_, false);
             hub_->addForceFromChild
             (
                 forceField,

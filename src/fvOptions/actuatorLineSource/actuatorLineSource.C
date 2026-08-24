@@ -801,6 +801,11 @@ void Foam::fv::actuatorLineSource::calculateElementForces()
     {
         elements_[i].calculateForce();
     }
+    // Write performance to file
+    if (Pstream::master() && (writePerf_ || writePerfEnd_))
+    {
+        writePerf();
+    }
 }
 
 const Foam::vector Foam::fv::actuatorLineSource::force()
@@ -859,12 +864,6 @@ void Foam::fv::actuatorLineSource::addForce
     {
         Info<< "Force (per unit density) on " << name_ << ": "
             << endl << force_ << endl << endl;
-    }
-
-    // Write performance to file
-    if (Pstream::master() && (writePerf_ || writePerfEnd_))
-    {
-        writePerf();
     }
 }
 

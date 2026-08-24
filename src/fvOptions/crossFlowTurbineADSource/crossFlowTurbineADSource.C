@@ -238,7 +238,7 @@ void Foam::fv::crossFlowTurbineADSource::calculateForces()
         {
             forAll(actuatorLines_, i)
             {
-                actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, false);
+                actuatorLines_[i]->setAzimuthIndex(azimuthIndex_, true);
                 actuatorLines_[i]->setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -280,7 +280,7 @@ void Foam::fv::crossFlowTurbineADSource::addForce
         // Add source for blade actuator lines
         forAll(blades_, i)
         {
-            blades_[i].setAzimuthIndex(azimuthIndex_, true);
+            blades_[i].setAzimuthIndex(azimuthIndex_, false);
             blades_[i].setCustomTime // Not needed in current implementation
             (
                 customTime_[azimuthIndex_],
@@ -322,7 +322,7 @@ void Foam::fv::crossFlowTurbineADSource::addForce
             // Add source for strut actuator lines
             forAll(struts_, i)
             {
-                struts_[i].setAzimuthIndex(azimuthIndex_, true);
+                struts_[i].setAzimuthIndex(azimuthIndex_, false);
                 struts_[i].setCustomTime
                 (
                     customTime_[azimuthIndex_],
@@ -365,7 +365,7 @@ void Foam::fv::crossFlowTurbineADSource::addForce
         if (hasShaft_)
         {
             // Add source for shaft actuator line
-            shaft_->setAzimuthIndex(azimuthIndex_, true);
+            shaft_->setAzimuthIndex(azimuthIndex_, false);
             shaft_->setCustomTime
             (
                 customTime_[azimuthIndex_],
