@@ -124,6 +124,33 @@ protected:
         //- Switch for correcting end effects
         bool endEffectsActive_;
 
+        //- Maximum number of stations used for the Prandtl end-effect matrix
+        //  (avoids ill-conditioning for very fine actuator lines)
+        label maxNElementsEndEffects_;
+
+        //- Maximum allowed condition number for the Prandtl matrix
+        scalar maxConditionNumberEndEffects_;
+
+        //- Maximum allowed residual for the Prandtl matrix
+        scalar maxResidualEndEffects_;
+
+        //- Whether to apply central normalisation of end-effect factors
+        bool normalizeEndEffects_;
+
+        //- Fraction of the blade (from root) to ignore when looking for
+        //  the peak factor
+        scalar ignoreLowValuesEndEffects_;
+
+        //- Fraction of the blade (from tip) to ignore when looking for
+        //  the peak factor
+        scalar ignoreHighValuesEndEffects_;
+
+        //- Chord lengths of every element (for end effects)
+        List<scalar> elementChordLengths_;
+
+        //- Non-dimensional root distances of every element (for end effects)
+        List<scalar> elementRootDistances_;
+
 
     // Protected Member Functions
 

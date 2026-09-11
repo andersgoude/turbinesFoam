@@ -24,6 +24,7 @@ License
 \*---------------------------------------------------------------------------*/
 
 #include "actuatorLineSource.H"
+#include "interpolateUtils.H"
 #include "unitConversion.H"
 #include "addToRunTimeSelectionTable.H"
 #include "vector.H"
@@ -31,6 +32,7 @@ License
 #include "geometricOneField.H"
 #include "syncTools.H"
 #include "simpleMatrix.H"
+#include "SVD.H"
 
 // * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * * //
 
@@ -66,6 +68,21 @@ bool Foam::fv::actuatorLineSource::read(const dictionary& dict)
         coeffs_.lookup("freeStreamVelocity") >> freeStreamVelocity_;
         freeStreamDirection_ = freeStreamVelocity_/mag(freeStreamVelocity_);
         endEffectsActive_ = coeffs_.lookupOrDefault("endEffects", false);
+        maxNElementsEndEffects_ =
+            coeffs_.lookupOrDefault<label>("maxNElementsEndEffects", 240);
+        maxConditionNumberEndEffects_ = coeffs_.lookupOrDefault<scalar>
+        (
+            "maxConditionNumberEndEffects",
+            1e10
+        );
+        maxResidualEndEffects_ =
+            coeffs_.lookupOrDefault<scalar>("maxResidualEndEffects", 1e-8);
+        normalizeEndEffects_ =
+            coeffs_.lookupOrDefault<bool>("normalizeEndEffects", true);
+        ignoreLowValuesEndEffects_ =
+            coeffs_.lookupOrDefault<scalar>("ignoreLowValuesEndEffects", 0.2);
+        ignoreHighValuesEndEffects_ =
+            coeffs_.lookupOrDefault<scalar>("ignoreHighValuesEndEffects", 0.2);
 
         // Read harmonic pitching parameters if present
         dictionary pitchDict = coeffs_.subOrEmptyDict("harmonicPitching");
@@ -389,6 +406,17 @@ void Foam::fv::actuatorLineSource::createElements()
         elements_[i].pitch(pitch);
         elements_[i].setVelocity(initialVelocity);
     }
+    if (endEffectsActive_)
+    {
+        elementChordLengths_.setSize(nElements_);
+        elementRootDistances_.setSize(nElements_);
+
+        forAll(elements_, i)
+        {
+            elementChordLengths_[i]   = elements_[i].chordLength();
+            elementRootDistances_[i]  = elements_[i].rootDistance();
+        }
+    }
 }
 
 
@@ -448,55 +476,271 @@ void Foam::fv::actuatorLineSource::calcEndEffects()
         Info<< "Calculating end effects for " << name_ << endl;
     }
 
+    // Decide how many stations to use for the linear system
+    label nCalc = min(nElements_, maxNElementsEndEffects_);
+
     scalar pi = Foam::constant::mathematical::pi;
-    List<scalar> c(nElements_, 1.0); // Chord lengths
-    List<scalar> alpha(nElements_, 0.1); // Geometric AoA in radians
-    List<scalar> theta(nElements_); // Span distance rescaled on [0, pi]
-    List<scalar> relVelMag(nElements_, 1.0);
-    simpleMatrix<scalar> D(nElements_, 0.0, 0.1);
-    List<scalar> A(nElements_); // Fourier coefficients
-    List<scalar> circulation(nElements_);
-    List<scalar> cl(nElements_);
+    List<scalar> c; // Chord lengths
+    List<scalar> theta; // Span distance rescaled on [0, pi]
+    List<scalar> A; // Fourier coefficients
+    List<scalar> circulation;
+    List<scalar> cl;
+    List<scalar> factorsCalc;
+    
 
-    // Create lists from element parameters
-    forAll(elements_, n)
-    {
-        theta[n] = elements_[n].rootDistance()*pi;
-        c[n] = elements_[n].chordLength();
-        //~ alpha[n] = Foam::degToRad(elements_[n].angleOfAttackGeom());
-        //~ relVelMag[n] = mag(elements_[n].relativeVelocityGeom());
-    }
+    bool acceptable = false;
 
-    // Create D matrix
-    forAll(elements_, i)
+    while (nCalc > 4 && acceptable == false)   // never go below 4 stations
     {
-        scalar n = i + 1;
-        forAll(elements_, m)
+        theta.setSize(nCalc);
+        c.setSize(nCalc);
+        circulation.setSize(nCalc);
+        cl.setSize(nCalc);
+        factorsCalc.setSize(nCalc);
+        List<scalar> alpha(nCalc, 0.1);
+        List<scalar> relVelMag(nCalc, 1.0);
+        
+
+        // Create lists from element parameters
+        if (nCalc == nElements_)
         {
-            D[m][i] = 2.0*totalLength_/(pi*c[m])*sin(n*theta[m])
-                    + n*sin(n*theta[m]) / sin(theta[m]);
+            forAll(elements_, n)
+            {
+                theta[n] = elements_[n].rootDistance()*pi;
+                c[n] = elements_[n].chordLength();
+                //~ alpha[n] = Foam::degToRad(elements_[n].angleOfAttackGeom());
+                //~ relVelMag[n] = mag(elements_[n].relativeVelocityGeom());
+            }
         }
-        D.source()[i] = alpha[i];
-    }
-    A = D.solve();
+        else
+        {
+            // Uniform spacing in root-distance, staying away from the tips
+            const scalar dr = 1.0/(nCalc + 1);
+            for (label n = 0; n < nCalc; ++n)
+            {
+                const scalar rootDist = (n + 1)*dr;
+                theta[n] = rootDist*pi;
 
-    forAll(elements_, m)
-    {
-        scalar sumA = 0.0;
-        forAll(elements_, i)
+                // Linear interpolation of chord from the stored element data
+                c[n] = interpolateUtils::interpolate1D
+                (
+                    rootDist,
+                    elementRootDistances_,
+                    elementChordLengths_
+                );
+            }
+        }
+
+        // resize D matrix
+        simpleMatrix<scalar> D(nCalc, 0.0, 0.1);
+
+        forAll(theta, i)
         {
             scalar n = i + 1;
-            sumA += A[i]*sin(n*theta[m]);
+            forAll(theta, m)
+            {
+                D[m][i] = 2.0*totalLength_/(pi*c[m])*sin(n*theta[m])
+                        + n*sin(n*theta[m]) / sin(theta[m]);
+            }
+            D.source()[i] = alpha[i];
         }
-        circulation[m] = 2*totalLength_*relVelMag[m]*sumA;
-        cl[m] = circulation[m]/(0.5*c[m]*relVelMag[m]);
+
+        SVD svd(D, SMALL);                 // SMALL avoids zero singular values
+        const scalarList& S = svd.S();
+        const scalar cond = max(S)/(min(S) + VSMALL);
+
+        if (debug)
+        {
+            Info<< "  nCalc = " << nCalc
+                << ", estimated κ₂(D) = " << cond << endl;
+        }
+
+        if (cond < maxConditionNumberEndEffects_)
+        {
+            acceptable = true;
+            A = D.solve();
+
+            List<scalar> residual = D * A - D.source();
+            scalar resNorm = Foam::sqrt(sum(residual*residual));
+            if (resNorm > maxResidualEndEffects_)
+            {
+                acceptable = false;
+                Info<< "End correction has residual " << resNorm
+                    << ", rejecting solution with "
+                    << nCalc << " elements" << endl;
+            }
+
+            forAll(theta, m)
+            {
+                scalar sumA = 0.0;
+                forAll(theta, i)
+                {
+                    scalar n = i + 1;
+                    sumA += A[i]*sin(n*theta[m]);
+                }
+                circulation[m] = 2*totalLength_*relVelMag[m]*sumA;
+                cl[m] = circulation[m]/(0.5*c[m]*relVelMag[m]);
+            }
+            factorsCalc = cl/(2.0 * constant::mathematical::pi * alpha);
+            if (normalizeEndEffects_)
+            {
+                // Root-distance coordinates of the collocation stations
+                // (theta runs from 0 -> π, so rootDist = theta/π)
+                List<scalar> rootDist(nCalc);
+                forAll(theta, i)
+                {
+                    rootDist[i] = theta[i] / constant::mathematical::pi;
+                }
+
+                const scalar low  = ignoreLowValuesEndEffects_;
+                const scalar high = 1.0 - ignoreHighValuesEndEffects_;
+
+                // Collect indices inside the central interval [low, high]
+                DynamicList<label> centralIdx;
+                forAll(rootDist, i)
+                {
+                    if (rootDist[i] >= low && rootDist[i] <= high)
+                    {
+                        centralIdx.append(i);
+                    }
+                }
+
+                scalar normValue = 0.0;
+
+                if (centralIdx.size() > 0)
+                {
+                    // Normal case: take the maximum factor inside the interval
+                    normValue = factorsCalc[centralIdx[0]];
+                    forAll(centralIdx, j)
+                    {
+                        normValue = max(normValue, factorsCalc[centralIdx[j]]);
+                    }
+                }
+                else
+                {
+                    // Interval too narrow – fall back to the station closest
+                    // to the middle of the requested interval
+                    const scalar mid = 0.5*(low + high);
+                    label closest = 0;
+                    scalar minDist = mag(rootDist[0] - mid);
+
+                    for (label i = 1; i < nCalc; ++i)
+                    {
+                        const scalar d = mag(rootDist[i] - mid);
+                        if (d < minDist)
+                        {
+                            minDist = d;
+                            closest = i;
+                        }
+                    }
+                    normValue = factorsCalc[closest];
+
+                    if (debug)
+                    {
+                        Info<< "normalizeEndEffects: no station inside ["
+                            << low << ", " << high
+                            << "], using station " << closest
+                            << " (rootDist = " << rootDist[closest]
+                            << ")" << endl;
+                    }
+                }
+
+                // Protect against a zero / negative normValue
+                if (normValue < SMALL)
+                {
+                    WarningInFunction
+                        << "Normalisation value for end-effect "
+                        << "factors is too small (" << normValue
+                        << ").  Skipping normalisation." << endl;
+                }
+                else
+                {
+                    factorsCalc = factorsCalc/normValue;
+                }
+            }
+            // Optional safety: never allow factors > 1
+            forAll(factorsCalc, i)
+            {
+                factorsCalc[i] = min(factorsCalc[i], 1.0);
+            }
+            // Additional checks to avoid incorrect solutions
+            // No negative factors
+            if (min(factorsCalc) < 0.0)
+            {
+                acceptable = false;
+                Info<< "End correction has negative factors, rejecting "
+                    << "solution with " << nCalc << " elements" << endl;
+                    
+            }
+        }
+        else
+        {
+            Info<< "End correction has condition number " << cond
+                << ", rejecting solution with "
+                << nCalc << " elements" << endl;
+        }
+        if (acceptable == false)
+        {
+            // Too ill-conditioned → try fewer stations
+            nCalc = max(4, nCalc*3/4);   // reduce by ~25%
+            Info<< "Reducing number of elements for end effect correction to "
+                << nCalc << endl;
+        }
+        if (debug == 2)
+        {
+            Info<< "D.source: " << D.source() << endl;
+            Info<< "D: " << D << endl;
+        }
+    }
+
+    if (acceptable == false)
+    {
+        WarningInFunction
+            << "Could not find a well-conditioned Prandtl matrix "
+            << "even with nCalc = " << nCalc
+            << ". Using the last attempt." << endl;
+        // (A and factorsCalc are left from the last iteration)
     }
 
     // Set endEffectFactor for all elements
-    List<scalar> factors = cl/Foam::max(cl);
-    forAll(elements_, i)
+    
+    if (nCalc == nElements_)
     {
-        elements_[i].setEndEffectFactor(factors[i]);
+        forAll(elements_, i)
+        {
+            elements_[i].setEndEffectFactor(factorsCalc[i]);
+        }
+    }
+    else
+    {
+        // Interpolate onto the true element locations
+
+        // Build extended tables that force zero factor at the tips
+        List<scalar> rootDistCalc(nCalc + 2);
+        List<scalar> factorCalc  (nCalc + 2);
+
+        rootDistCalc[0]           = 0.0;
+        factorCalc[0]             = 0.0;
+        rootDistCalc[nCalc + 1]   = 1.0;
+        factorCalc[nCalc + 1]     = 0.0;
+
+        for (label i = 0; i < nCalc; i++)
+        {
+            rootDistCalc[i + 1] = theta[i]/pi;
+            factorCalc[i + 1]   = factorsCalc[i];
+        }
+
+        // Now map onto every original element
+        forAll(elements_, i)
+        {
+            const scalar f = interpolateUtils::interpolate1D
+            (
+                elementRootDistances_[i],
+                rootDistCalc,
+                factorCalc
+            );
+            elements_[i].setEndEffectFactor(f);
+        }
     }
 
     if (debug == 2)
@@ -505,10 +749,8 @@ void Foam::fv::actuatorLineSource::calcEndEffects()
         Info<< "theta: " << theta << endl;
         Info<< "A: " << A << endl;
         Info<< "c: " << c << endl;
-        Info<< "D.source: " << D.source() << endl;
-        Info<< "D: " << D << endl;
         Info<< "cl: " << cl << endl;
-        Info<< "factors:" << factors << endl;
+        Info<< "factors:" << factorsCalc << endl;
     }
 }
 
@@ -568,7 +810,9 @@ Foam::fv::actuatorLineSource::actuatorLineSource
     writePerf_(coeffs_.lookupOrDefault("writePerf", false)),
     writePerfEnd_(coeffs_.lookupOrDefault("writePerfEnd", false)),
     lastMotionTime_(mesh.time().value()),
-    endEffectsActive_(false)
+    endEffectsActive_(false),
+    elementChordLengths_(0),
+    elementRootDistances_(0)
 {
     read(dict_);
     createElements();
