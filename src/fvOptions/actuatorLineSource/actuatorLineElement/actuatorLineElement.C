@@ -61,6 +61,7 @@ void Foam::fv::actuatorLineElement::read()
     dict_.lookup("cone") >> cone_;
     dict_.lookup("velocitySampleRadius") >> velocitySampleRadius_;
     dict_.lookup("nVelocitySamples") >> nVelocitySamples_;
+    dict_.lookup("endEffectsCorrectAoA") >> endEffectsCorrectAngleOfAttack_;
 
 
     // Create dynamic stall model if found
@@ -1126,11 +1127,22 @@ void Foam::fv::actuatorLineElement::calculateForce()
         correctFlowCurvature(angleOfAttackRad);
     }
 
+    // Update Reynolds number of profile data
+    profileData_.updateRe(Re_);
+
     // Calculate angle of attack in degrees
     angleOfAttack_ = radToDeg(angleOfAttackRad);
 
-    // Update Reynolds number of profile data
-    profileData_.updateRe(Re_);
+    // If we correct the angle of attack, reduce it with using endEffectFactor_
+    // if endEffectFactor_ = 0, we should have the angle of attack that
+    // gives zero lift coefficient
+    if (endEffectsCorrectAngleOfAttack_)
+    {
+        scalar zeroLiftAngleOfAttack = profileData_.zeroLiftAngleOfAttack();
+        angleOfAttack_ =
+            (angleOfAttack_ - zeroLiftAngleOfAttack)*endEffectFactor_
+            + zeroLiftAngleOfAttack;
+    }
 
     // Lookup lift and drag coefficients
     lookupCoefficients();
@@ -1182,7 +1194,10 @@ void Foam::fv::actuatorLineElement::calculateForce()
     }
 
     // Apply end effect correction factor to lift coefficient
-    liftCoefficient_[azimuthIndex_] *= endEffectFactor_;
+    if (endEffectsCorrectAngleOfAttack_ == false)
+    {
+        liftCoefficient_[azimuthIndex_] *= endEffectFactor_;
+    }
 
     // Calculate force per unit density
     scalar area = chordLength_ * spanLength_;

@@ -41,6 +41,31 @@ Foam::scalar Foam::profileData::interpolate
     label indexP = 0;
     label indexM = 0;
     scalar error = 1.0E30;
+
+    // ----- Safety checks -----
+    if (xOld.empty() || yOld.empty())
+    {
+        FatalErrorInFunction
+            << "Empty list(s) passed to interpolate()" << nl
+            << "xOld.size() = " << xOld.size()
+            << ", yOld.size() = " << yOld.size()
+            << abort(FatalError);
+    }
+
+    if (xOld.size() != yOld.size())
+    {
+        FatalErrorInFunction
+            << "xOld and yOld have different sizes: "
+            << xOld.size() << " vs " << yOld.size()
+            << abort(FatalError);
+    }
+
+    if (xOld.size() == 1)
+    {
+        // Only one point available – return that value
+        return yOld[0];
+    }
+
     forAll(xOld, i)
     {
         scalar diff = mag(xNew - xOld[i]);
@@ -299,6 +324,24 @@ void Foam::profileData::calcZeroLiftAngleOfAttack()
 {
     List<scalar> clList = liftCoefficientList(-10, 10);
     List<scalar> alphaList = angleOfAttackList(-10, 10);
+
+    // Special case: lift coefficient is (essentially) zero everywhere.
+    // Any AoA satisfies CL = 0; we adopt the conventional value 0.
+    bool allZero = true;
+    forAll(clList, i)
+    {
+        if (mag(clList[i]) > SMALL)
+        {
+            allZero = false;
+            break;
+        }
+    }
+
+    if (allZero || clList.size() < 2)
+    {
+        zeroLiftAngleOfAttack_ = 0.0;
+        return;
+    }
     zeroLiftAngleOfAttack_ = interpolate(0, clList, alphaList);
 }
 
@@ -425,6 +468,8 @@ Foam::List<scalar> Foam::profileData::subList
 )
 {
     List<scalar> newList;
+
+    // First collect all points strictly inside the requested range
     forAll(angleOfAttackList_, i)
     {
         if
@@ -437,6 +482,51 @@ Foam::List<scalar> Foam::profileData::subList
             newList.append(fullList[i]);
         }
     }
+
+    // Need at least 2 points for linear interpolation.
+    // If not enough, expand by adding the closest points outside the range.
+    if (newList.size() < 2 && angleOfAttackList_.size() >= 2)
+    {
+        // Find the indices of the points that would bracket the interval
+        label iLow  = -1;   // largest index with α < start
+        label iHigh = -1;   // smallest index with α > stop
+
+        forAll(angleOfAttackList_, i)
+        {
+            if (angleOfAttackList_[i] < alphaDegStart)
+            {
+                iLow = i;
+            }
+            else if (angleOfAttackList_[i] > alphaDegStop && iHigh < 0)
+            {
+                iHigh = i;
+            }
+        }
+
+        // Build a new list that includes the bracketing points
+        newList.clear();
+        label startIdx = (iLow  >= 0) ? iLow  : 0;
+        label endIdx   = (iHigh >= 0) ? iHigh : angleOfAttackList_.size() - 1;
+
+        // Guarantee we take at least two points
+        if (endIdx - startIdx < 1)
+        {
+            if (startIdx > 0)          --startIdx;
+            else if (endIdx < angleOfAttackList_.size()-1) ++endIdx;
+        }
+
+        for (label i = startIdx; i <= endIdx; ++i)
+        {
+            newList.append(fullList[i]);
+        }
+    }
+
+    // Final safety: if the whole table has < 2 points, return what we have
+    if (newList.size() < 2 && fullList.size() >= 2)
+    {
+        newList = fullList;   // fall back to the entire list
+    }
+
     return newList;
 }
 

@@ -334,6 +334,11 @@ void Foam::fv::actuatorLineSource::createElements()
         dict.add("addedMass", coeffs_.lookupOrDefault("addedMass", false));
         dict.add
         (
+            "endEffectsCorrectAoA",
+            coeffs_.lookupOrDefault("endEffectsCorrectAoA", false)
+        );
+        dict.add
+        (
             "velocitySampleRadius",
             coeffs_.lookupOrDefault("velocitySampleRadius", 0.0)
         );

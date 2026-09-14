@@ -231,6 +231,9 @@ protected:
         //- End effect correction factor [0, 1]
         scalar endEffectFactor_;
 
+        //- Correct angle of attack instead of CL
+        bool endEffectsCorrectAngleOfAttack_;
+
         //- Switch for added mass correction
         bool addedMassActive_;
 
