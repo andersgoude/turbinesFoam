@@ -150,9 +150,6 @@ protected:
         //- corresponding velocities to ringCellI_
         List<List<vector>> velocitiesRing_;
 
-        //- active ring index for caching
-        label activeRingIndex_;
-
         //- Relative flow velocity
         List<vector> relativeVelocity_;
 
@@ -306,7 +303,7 @@ protected:
 
 
         //- Get inflow velocity
-        void calculateInflowVelocity();
+        void calculateRingVelocity();
 
         //- Create the performance output file
         virtual void createOutputFile();
