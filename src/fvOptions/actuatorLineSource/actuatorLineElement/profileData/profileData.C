@@ -511,8 +511,14 @@ Foam::List<scalar> Foam::profileData::subList
         // Guarantee we take at least two points
         if (endIdx - startIdx < 1)
         {
-            if (startIdx > 0)          --startIdx;
-            else if (endIdx < angleOfAttackList_.size()-1) ++endIdx;
+            if (startIdx > 0)
+            {
+                --startIdx;
+            }
+            else if (endIdx < angleOfAttackList_.size()-1)
+            {
+                ++endIdx;
+            }
         }
 
         for (label i = startIdx; i <= endIdx; ++i)
