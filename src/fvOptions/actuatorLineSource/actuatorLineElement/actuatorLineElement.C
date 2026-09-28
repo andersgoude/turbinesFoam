@@ -752,10 +752,9 @@ void Foam::fv::actuatorLineElement::findCells(bool includeRing)
     }
 }
 
-void Foam::fv::actuatorLineElement::calculateInflowVelocity()
+void Foam::fv::actuatorLineElement::calculateRingVelocity()
 {
     vector localVelocitySum = vector::zero;
-    label localNSamples = 0;
     
     // If the flow is sampled by using a circle around position_, then
     // overwrite the inflow velocity with the mean value over all circle points
@@ -764,16 +763,10 @@ void Foam::fv::actuatorLineElement::calculateInflowVelocity()
         // Calculate mean value over all circle points
         for (label point = 0; point < nVelocitySamples_; point++)
         {
-            activeRingIndex_ = point; // actuator disc, use ring cache
-            label sampleCellI = ringCellI_[azimuthIndex_][point];
-            if (sampleCellI >= 0)
-            {
-                localVelocitySum += velocitiesRing_[azimuthIndex_][point];
-                localNSamples++;
-            }
+            localVelocitySum += velocitiesRing_[azimuthIndex_][point];
         }
         // Set inflow Velocity as the mean value
-        inflowVelocity_ = 1.0 / localNSamples * localVelocitySum;
+        inflowVelocity_ = 1.0 / nVelocitySamples_ * localVelocitySum;
     }
 }
 
@@ -873,7 +866,6 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     centerProcI_(1, -1),
     ringCellI_(0),
     ringProcI_(0),
-    activeRingIndex_(-1),
     relativeVelocity_(1, vector::zero),
     relativeVelocityGeom_(vector::zero),
     angleOfAttack_(0.0),
@@ -1092,7 +1084,7 @@ void Foam::fv::actuatorLineElement::calculateForce()
     }
 
     // Find local flow velocity by interpolating to element location
-    calculateInflowVelocity();
+    calculateRingVelocity();
     
 
     // Subtract spanwise component of inflow velocity
