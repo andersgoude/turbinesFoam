@@ -231,6 +231,12 @@ protected:
         //- Correct angle of attack instead of CL
         bool endEffectsCorrectAngleOfAttack_;
 
+        //- Correct angle of relative wind
+        bool endEffectsCorrectAngleOfRelWind_;
+
+        //- The angle to correct the wind with
+        scalar angleOfAttackDiff_;
+
         //- Switch for added mass correction
         bool addedMassActive_;
 

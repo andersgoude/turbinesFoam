@@ -339,6 +339,11 @@ void Foam::fv::actuatorLineSource::createElements()
         );
         dict.add
         (
+            "endEffectsCorrectWindAngle",
+            coeffs_.lookupOrDefault("endEffectsCorrectWindAngle", false)
+        );
+        dict.add
+        (
             "velocitySampleRadius",
             coeffs_.lookupOrDefault("velocitySampleRadius", 0.0)
         );

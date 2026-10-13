@@ -62,6 +62,7 @@ void Foam::fv::actuatorLineElement::read()
     dict_.lookup("velocitySampleRadius") >> velocitySampleRadius_;
     dict_.lookup("nVelocitySamples") >> nVelocitySamples_;
     dict_.lookup("endEffectsCorrectAoA") >> endEffectsCorrectAngleOfAttack_;
+    dict_.lookup("endEffectsCorrectWindAngle") >> endEffectsCorrectAngleOfRelWind_;
 
 
     // Create dynamic stall model if found
@@ -887,6 +888,7 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     outputFile_(nullptr),
     rootDistance_(0.0),
     endEffectFactor_(1.0),
+    angleOfAttackDiff_(0.0),
     addedMassActive_(dict.lookupOrDefault("addedMass", false)),
     addedMass_(mesh.time(), dict.lookupOrDefault("chordLength", 1.0), debug),
     influenceCells_(0),
@@ -1047,7 +1049,7 @@ Foam::scalar Foam::fv::actuatorLineElement::inflowRefAngle()
         * mag(chordRefDirection_[azimuthIndex_]));
     scalar inflowVelAngleRad =
         acos(sign(arg)*min(Foam::scalar(1.0), mag(arg)));
-    return radToDeg(inflowVelAngleRad);
+    return radToDeg(inflowVelAngleRad - angleOfAttackDiff_);
 }
 
 
@@ -1128,12 +1130,18 @@ void Foam::fv::actuatorLineElement::calculateForce()
     // If we correct the angle of attack, reduce it with using endEffectFactor_
     // if endEffectFactor_ = 0, we should have the angle of attack that
     // gives zero lift coefficient
-    if (endEffectsCorrectAngleOfAttack_)
+    angleOfAttackDiff_ = 0.0;
+    if (endEffectsCorrectAngleOfAttack_ || endEffectsCorrectAngleOfRelWind_)
     {
         scalar zeroLiftAngleOfAttack = profileData_.zeroLiftAngleOfAttack();
-        angleOfAttack_ =
+        scalar angleOfAttackNew =
             (angleOfAttack_ - zeroLiftAngleOfAttack)*endEffectFactor_
             + zeroLiftAngleOfAttack;
+        angleOfAttackDiff_ = degToRad(angleOfAttack_ - angleOfAttackNew);
+        if (endEffectsCorrectAngleOfAttack_)
+        {
+            angleOfAttack_ = angleOfAttackNew;
+        }
     }
 
     // Lookup lift and drag coefficients
@@ -1201,6 +1209,24 @@ void Foam::fv::actuatorLineElement::calculateForce()
     liftDirection /= mag(liftDirection);
     vector dragDirection =
         relativeVelocity_[azimuthIndex_]/mag(relativeVelocity_[azimuthIndex_]);
+
+    if (endEffectsCorrectAngleOfRelWind_)
+    {
+        rotateVector
+        (
+            liftDirection,
+            vector::zero,
+            spanDirection_[azimuthIndex_],
+            angleOfAttackDiff_
+        );
+        rotateVector
+        (
+            dragDirection,
+            vector::zero,
+            spanDirection_[azimuthIndex_],
+            angleOfAttackDiff_
+        );
+    }
     forceVector_[azimuthIndex_] = lift*liftDirection + drag*dragDirection;
 
     if (debug)
