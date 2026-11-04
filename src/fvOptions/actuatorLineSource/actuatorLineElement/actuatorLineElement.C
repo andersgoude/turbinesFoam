@@ -62,7 +62,10 @@ void Foam::fv::actuatorLineElement::read()
     dict_.lookup("velocitySampleRadius") >> velocitySampleRadius_;
     dict_.lookup("nVelocitySamples") >> nVelocitySamples_;
     dict_.lookup("endEffectsCorrectAoA") >> endEffectsCorrectAngleOfAttack_;
-    dict_.lookup("endEffectsCorrectWindAngle") >> endEffectsCorrectAngleOfRelWind_;
+    dict_.lookup("endEffectsCorrectWindAngle") >>
+        endEffectsCorrectAngleOfRelWind_;
+    dict_.lookup("endEffectsCorrectAngleClamp") >>
+        endEffectsCorrectAngleClamp_;
 
 
     // Create dynamic stall model if found
@@ -796,9 +799,10 @@ void Foam::fv::actuatorLineElement::createOutputFile()
 
     if (outputFile_.is_open())
     {
-        outputFile_<< "time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,"
-                   << "alpha_geom_deg,cl,cd,fx,fy,fz,end_effect_factor,"
-                   << "c_ref_t,c_ref_n,f_ref_t,f_ref_n" << std::endl;
+        outputFile_<< "time,root_dist,span_length,x,y,z,rel_vel_mag,Ux,Re,"
+                   << "alpha_deg,alpha_geom_deg,phi,cl,cd,fx,fy,fz,"
+                   << "end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n"
+                   << std::endl;
     }
 }
 
@@ -807,15 +811,20 @@ void Foam::fv::actuatorLineElement::writePerf()
 {
     scalar time = mesh_.time().value();
 
-    // write time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,alpha_geom_deg,cl,cd,
-    // fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n
-    stringBuffer_<< time << "," << rootDistance_ << ","
+    // write time,root_dist,x,y,z,rel_vel_mag,Ux,Re,alpha_deg,alpha_geom_deg,
+    // phi,cl,cd,fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n
+    stringBuffer_<< time << ","
+            << rootDistance_ << ","
+            << spanLength_ << ","
             << position_[azimuthIndex_].x() << ","
             << position_[azimuthIndex_].y() << ","
             << position_[azimuthIndex_].z() << ","
-            << mag(relativeVelocity_[azimuthIndex_])
-            << "," << Re_ << "," << angleOfAttack_
-            << "," << angleOfAttackGeom_ << ","
+            << mag(relativeVelocity_[azimuthIndex_]) << ","
+            << relativeVelocity_[azimuthIndex_].x() << ","
+            << Re_ << ","
+            << angleOfAttack_ << ","
+            << angleOfAttackGeom_ << ","
+            << inflowRefAngle() << ","
             << liftCoefficient_[azimuthIndex_] << ","
             << dragCoefficient_[azimuthIndex_] << ","
             << forceVector_[azimuthIndex_].x()*localRho_[azimuthIndex_] << ","
@@ -1049,7 +1058,8 @@ Foam::scalar Foam::fv::actuatorLineElement::inflowRefAngle()
         * mag(chordRefDirection_[azimuthIndex_]));
     scalar inflowVelAngleRad =
         acos(sign(arg)*min(Foam::scalar(1.0), mag(arg)));
-    return radToDeg(inflowVelAngleRad - angleOfAttackDiff_);
+    return radToDeg(inflowVelAngleRad -
+                    (endEffectsCorrectAngleOfRelWind_?angleOfAttackDiff_:0));
 }
 
 
@@ -1137,7 +1147,20 @@ void Foam::fv::actuatorLineElement::calculateForce()
         scalar angleOfAttackNew =
             (angleOfAttack_ - zeroLiftAngleOfAttack)*endEffectFactor_
             + zeroLiftAngleOfAttack;
-        angleOfAttackDiff_ = degToRad(angleOfAttack_ - angleOfAttackNew);
+        scalar diff = degToRad(angleOfAttack_ - angleOfAttackNew);
+        if (endEffectsCorrectAngleClamp_ >= 0)
+        {
+            // Limit the max rotation of the lift and drag
+            angleOfAttackDiff_ =
+                sign(diff) *
+                min(
+                    fabs(diff), degToRad(endEffectsCorrectAngleClamp_)
+                );
+        }
+        else
+        {
+            angleOfAttackDiff_ = diff;
+        }
         if (endEffectsCorrectAngleOfAttack_)
         {
             angleOfAttack_ = angleOfAttackNew;
